@@ -147,6 +147,16 @@ func (c *Catalog) Ingest(ctx context.Context, uid int64, opt UploadOptions) (id 
 	if !hasMedia {
 		return "", ErrNoAudio
 	}
+	stagedFiles := []*scannedFile{}
+	for _, f := range book.Files {
+		copy := *f
+		copy.Relative = filepath.Join(temp, f.Name)
+		stagedFiles = append(stagedFiles, &copy)
+	}
+	book.Sidecar, err = c.readSidecars(ctx, stagedFiles)
+	if err != nil {
+		return "", err
+	}
 	sort.SliceStable(book.Files, func(i, j int) bool { return naturalLess(book.Files[i].Name, book.Files[j].Name) })
 	// Recheck access immediately before publishing; revocation during a long
 	// transfer cannot grant a new book to an account that no longer has access.
@@ -162,6 +172,16 @@ func (c *Catalog) Ingest(ctx context.Context, uid int64, opt UploadOptions) (id 
 	report := ScanReport{}
 	if err = c.commitScannedBook(ctx, tx, book, &report); err != nil {
 		return "", err
+	}
+	if book.Sidecar != nil {
+		it, e := scanItem(tx.QueryRowContext(ctx, `SELECT `+itemColumns+` FROM catalog_items WHERE id=?`, book.Item.ID))
+		if e != nil {
+			return "", e
+		}
+		book.Sidecar.Expected = it.UpdatedAt
+		if e = editItem(ctx, tx, current, it, *book.Sidecar); e != nil {
+			return "", e
+		}
 	}
 	// Publishing a directory is atomic. Go's directory Rename refuses an
 	// existing destination, so a concurrent upload cannot replace another book.

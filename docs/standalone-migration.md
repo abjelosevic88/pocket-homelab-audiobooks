@@ -27,7 +27,9 @@ scripts, not by the application at runtime.
    scans, configurable polling for changes, persistent/cancellable scan jobs,
    validated uploads, folder creation, metadata/chapter/cover editing and author/
    series associations are implemented. Same-root folder moves retain IDs.
-   Provider matching, sidecars, cross-root moves, deletion and bulk tooling remain.
+   JSON/description/narrator sidecars are read for new books, and explicit sidecar
+   imports preserve ordinary manual edits. Scans reject concurrent edits. Provider
+   matching, legacy metadata.abs, cross-root moves, deletion and bulk tooling remain.
 4. **Remaining feature parity.** Collection and personal playlist CRUD, ordering,
    imported associations and streamed original-file ZIP downloads are implemented.
    Further work includes transcoding and tools,
@@ -94,7 +96,7 @@ as a standalone implementation.
 | --- | --- | --- |
 | Libraries | Multiple libraries/folders; ordering; book and podcast media; access restrictions | Imported browse/access verified; management pending |
 | Scanning | Incremental scan, watcher, manual/rescan, missing files, regrouping, file moves | Incremental/manual scans, polling, missing records and same-root moves verified; regrouping/cross-root moves pending |
-| Book ingestion | Single/multiple audio files, ebooks, tags, sidecars, chapters, covers, track order | Pending |
+| Book ingestion | Single/multiple audio files, ebooks, tags, sidecars, chapters, covers, track order | Audio tags, natural ordering, embedded chapters, covers and JSON/text sidecars verified; legacy metadata.abs and multi-disc grouping pending |
 | Library management | Uploads, metadata/chapter editing, bulk operations, download, safe deletion | Validated uploads, metadata/chapters/covers and single-file and streamed book ZIP downloads implemented; bulk tools/deletion pending |
 | Metadata | Built-in/custom providers, matching, covers, authors, series, genres, tags, narrators | Pending |
 | Browse | Search, filters, sorts, pagination, shelves, series and authors | Pending |

@@ -18,9 +18,9 @@ export function NativeLibrarySettings() {
     catch (e) { setError(errMsg(e)) }
   }
   useEffect(() => { void load(); const timer = window.setInterval(load, 5000); return () => clearInterval(timer) }, [])
-  const scan = async (id: string, force = false) => {
+  const scan = async (id: string, force = false, import_metadata = false) => {
     setBusy(id)
-    try { await api.post(`${V1}/catalog/libraries/${encodeURIComponent(id)}/scan`, { force }); toast('Scanning started'); await load() }
+    try { await api.post(`${V1}/catalog/libraries/${encodeURIComponent(id)}/scan`, { force, import_metadata }); toast('Scanning started'); await load() }
     catch (e) { toast(errMsg(e), 'err') }
     finally { setBusy('') }
   }
@@ -50,10 +50,11 @@ export function NativeLibrarySettings() {
         {lib.can_scan && <div className="set-section-body stack">
           <label><input type="checkbox" checked={lib.watch} onChange={e => watch(lib, e.target.checked)} /> Automatically check for file changes</label>
           {lib.watch && <label>Check every <select value={lib.interval_seconds || 600} onChange={e => watch(lib, true, Number(e.target.value))}><option value={60}>minute</option><option value={600}>10 minutes</option><option value={3600}>hour</option><option value={86400}>day</option></select></label>}
-          <p className="muted small">Scan for new and changed files. Missing files stay in the catalog. A full rescan reads audio metadata again.</p>
+          <p className="muted small">Scan for new and changed files. Missing files stay in the catalog. A full rescan reads audio metadata again. Import sidecars replaces matching catalog fields with metadata.json, desc.txt and reader.txt.</p>
           <div className="row wrap">
             <button type="button" className="btn primary" disabled={!!running || busy === lib.id} onClick={() => scan(lib.id)}>Scan library</button>
             <button type="button" className="btn" disabled={!!running || busy === lib.id} onClick={() => scan(lib.id, true)}>Full rescan</button>
+            <button type="button" className="btn" disabled={!!running || busy === lib.id} onClick={() => scan(lib.id, false, true)}>Import sidecars</button>
             {running && <button type="button" className="btn" onClick={() => cancel(running.id)}>Cancel scan</button>}
           </div>
           {latest && <div role="status" className="small"><p>{latest.status} · {fmtDateTime(new Date(latest.started_at).toISOString())}</p>

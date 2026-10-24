@@ -20,9 +20,10 @@ import (
 )
 
 type ScanOptions struct {
-	Started func(string)
-	FFprobe string
-	Force   bool
+	ImportMetadata bool // Explicitly replace existing fields from sidecar files.
+	Started        func(string)
+	FFprobe        string
+	Force          bool
 }
 type ScanReport struct {
 	Invalid   int    `json:"invalid"`
@@ -53,6 +54,7 @@ type scannedFile struct {
 	OldItem                                                  string
 }
 type scanBook struct {
+	Sidecar        *EditOptions
 	Item           Item
 	Doc            sourceRow
 	Files          []*scannedFile
@@ -127,6 +129,10 @@ func (c *Catalog) scanFolders(ctx context.Context, lib string) ([]scanFolder, er
 	return folders, rows.Err()
 }
 func scanRole(name string) string {
+	switch strings.ToLower(filepath.Base(name)) {
+	case "metadata.json", "desc.txt", "reader.txt":
+		return "supplement"
+	}
 	ext := strings.ToLower(filepath.Ext(name))
 	switch ext {
 	case ".mp3", ".m4b", ".m4a", ".mp4", ".flac", ".ogg", ".opus", ".wav", ".aac", ".wma", ".aiff":
@@ -363,7 +369,7 @@ func (c *Catalog) Scan(ctx context.Context, uid int64, lib string, opt ScanOptio
 				if book == nil {
 					group := filepath.Dir(f.Source)
 					if group == folder.Source {
-						if role == "cover" {
+						if role == "cover" || role == "supplement" {
 							return nil
 						}
 						group = strings.TrimSuffix(f.Source, filepath.Ext(f.Source))
@@ -385,7 +391,20 @@ func (c *Catalog) Scan(ctx context.Context, uid int64, lib string, opt ScanOptio
 			return report, e
 		}
 	}
+	// Sidecars are bounded and read before taking the database write lock.
+	for _, book := range books {
+		if book.New || opt.ImportMetadata {
+			book.Sidecar, err = c.readSidecars(ctx, book.Files)
+			if err != nil {
+				return report, err
+			}
+		}
+	}
 	if err = c.CanScan(ctx, uid, lib); err != nil {
+		return report, err
+	}
+	account, err := c.Account(ctx, uid)
+	if err != nil {
 		return report, err
 	}
 	tx, err := c.DB.BeginTx(ctx, nil)
@@ -396,6 +415,15 @@ func (c *Catalog) Scan(ctx context.Context, uid int64, lib string, opt ScanOptio
 	for _, book := range books {
 		if err = ctx.Err(); err != nil {
 			return report, err
+		}
+		if !book.New {
+			var version int64
+			if err = tx.QueryRowContext(ctx, `SELECT updated_at FROM catalog_items WHERE id=?`, book.Item.ID).Scan(&version); err != nil {
+				return report, err
+			}
+			if version != book.Item.UpdatedAt {
+				return report, ErrConflict
+			}
 		}
 		if book.New {
 			audioOrEbook := false
@@ -415,7 +443,7 @@ func (c *Catalog) Scan(ctx context.Context, uid int64, lib string, opt ScanOptio
 				}
 			}
 			if covered {
-				if _, err = tx.ExecContext(ctx, `UPDATE catalog_items SET missing=1 WHERE id=?`, book.Item.ID); err != nil {
+				if _, err = tx.ExecContext(ctx, `UPDATE catalog_items SET missing=1,updated_at=MAX(updated_at+1,?) WHERE id=?`, time.Now().UnixMilli(), book.Item.ID); err != nil {
 					return report, err
 				}
 				report.Missing++
@@ -470,6 +498,16 @@ func (c *Catalog) Scan(ctx context.Context, uid int64, lib string, opt ScanOptio
 		})
 		if err = c.commitScannedBook(ctx, tx, book, &report); err != nil {
 			return report, err
+		}
+		if book.Sidecar != nil {
+			current, e := scanItem(tx.QueryRowContext(ctx, `SELECT `+itemColumns+` FROM catalog_items WHERE id=?`, book.Item.ID))
+			if e != nil {
+				return report, e
+			}
+			book.Sidecar.Expected = current.UpdatedAt
+			if e = editItem(ctx, tx, account, current, *book.Sidecar); e != nil {
+				return report, fmt.Errorf("sidecar for %s: %w", book.Path, e)
+			}
 		}
 	}
 	if err = tx.Commit(); err != nil {
@@ -619,7 +657,7 @@ func (c *Catalog) commitScannedBook(ctx context.Context, tx *sql.Tx, b *scanBook
 		}
 		report.Added++
 	} else if !bytes.Equal([]byte(raw(b.Doc)), b.Item.Document) || b.Item.Missing {
-		if _, err := tx.ExecContext(ctx, `UPDATE catalog_items SET duration=?,missing=?,updated_at=?,document=? WHERE id=?`, duration, b.Item.Missing, time.Now().UnixMilli(), raw(b.Doc), b.Item.ID); err != nil {
+		if _, err := tx.ExecContext(ctx, `UPDATE catalog_items SET duration=?,missing=?,updated_at=MAX(updated_at+1,?),document=? WHERE id=?`, duration, b.Item.Missing, time.Now().UnixMilli(), raw(b.Doc), b.Item.ID); err != nil {
 			return err
 		}
 		report.Updated++

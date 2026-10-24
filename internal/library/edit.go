@@ -33,16 +33,25 @@ func (c *Catalog) Edit(ctx context.Context, uid int64, id string, in EditOptions
 	if in.Expected != it.UpdatedAt {
 		return ErrConflict
 	}
-	var doc sourceRow
-	if err = json.Unmarshal(it.Document, &doc); err != nil {
-		return err
-	}
-	media := object(doc["media"])
 	tx, err := c.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
+	if err = editItem(ctx, tx, a, it, in); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// editItem shares validation and optimistic concurrency across single edits,
+// atomic bulk changes and metadata discovered by the scanner.
+func editItem(ctx context.Context, tx *sql.Tx, a Account, it Item, in EditOptions) error {
+	var doc sourceRow
+	if err := json.Unmarshal(it.Document, &doc); err != nil {
+		return err
+	}
+	media := object(doc["media"])
 	for k, v := range in.Metadata {
 		switch k {
 		case "title", "subtitle", "description", "publisher", "publishedYear", "publishedDate", "isbn", "asin", "language":
@@ -162,7 +171,7 @@ func (c *Catalog) Edit(ctx context.Context, uid int64, id string, in EditOptions
 	}
 	doc["media"] = media
 	updated := max(it.UpdatedAt+1, time.Now().UnixMilli())
-	res, err := tx.ExecContext(ctx, `UPDATE catalog_items SET title=?,author=?,explicit=?,tags=?,document=?,updated_at=? WHERE id=? AND updated_at=?`, it.Title, it.Author, it.Explicit, raw(it.Tags), raw(doc), updated, id, in.Expected)
+	res, err := tx.ExecContext(ctx, `UPDATE catalog_items SET title=?,author=?,explicit=?,tags=?,document=?,updated_at=? WHERE id=? AND updated_at=?`, it.Title, it.Author, it.Explicit, raw(it.Tags), raw(doc), updated, it.ID, in.Expected)
 	if err != nil {
 		return err
 	}
@@ -173,7 +182,7 @@ func (c *Catalog) Edit(ctx context.Context, uid int64, id string, in EditOptions
 	if n != 1 {
 		return ErrConflict
 	}
-	return tx.Commit()
+	return nil
 }
 
 type NewLibrary struct {

@@ -56,14 +56,14 @@ func (s *Server) nativeManage(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, 200, nativeObject{"libraries": out})
 }
-func (s *Server) startNativeScan(uid int64, lib string, force bool) (string, error) {
+func (s *Server) startNativeScan(uid int64, lib string, force bool, sidecars ...bool) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Hour)
 	started := make(chan string, 1)
 	done := make(chan error, 1)
 	go func() {
 		defer cancel()
 		var id string
-		report, err := s.catalog().Scan(ctx, uid, lib, library.ScanOptions{FFprobe: s.cfg.FFprobe, Force: force, Started: func(value string) {
+		report, err := s.catalog().Scan(ctx, uid, lib, library.ScanOptions{FFprobe: s.cfg.FFprobe, Force: force, ImportMetadata: len(sidecars) > 0 && sidecars[0], Started: func(value string) {
 			id = value
 			s.nativeScanMu.Lock()
 			s.nativeScanCancel[id] = cancel
@@ -102,13 +102,14 @@ func (s *Server) nativeScanStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var in struct {
-		Force bool `json:"force"`
+		Force          bool `json:"force"`
+		ImportMetadata bool `json:"import_metadata"`
 	}
 	if err := decode(r, &in); err != nil {
 		writeErr(w, 400, "invalid JSON")
 		return
 	}
-	id, err := s.startNativeScan(actorID(r.Context()), chi.URLParam(r, "id"), in.Force)
+	id, err := s.startNativeScan(actorID(r.Context()), chi.URLParam(r, "id"), in.Force, in.ImportMetadata)
 	if err != nil {
 		s.nativeError(w, err)
 		return
