@@ -42,7 +42,7 @@ with tempfile.TemporaryDirectory(prefix='pab-gateway-') as tmp:
     base = f'http://127.0.0.1:{port}'
     password = secrets.token_hex(24)
     env = dict(os.environ, DATA_DIR=tmp, HOST='127.0.0.1', PORT=str(port), BASE_URL=base,
-               AUTH_MODE='local', SECURE_COOKIES='false', ADMIN_EMAIL='ana@example.com',
+               AUTH_MODE='local', MEDIA_BACKEND='audiobookshelf', SECURE_COOKIES='false', ADMIN_EMAIL='ana@example.com',
                ADMIN_PASSWORD=password, AUDIOBOOKSHELF_URL=abs_base, AUDIOBOOKSHELF_TOKEN=abs_key,
                CORE_URL='', NOTIFY_URL='', LOG_LEVEL='error')
     with open(tmp + '/server.log', 'w+') as log:

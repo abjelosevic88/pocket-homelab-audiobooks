@@ -275,7 +275,7 @@ function Users() {
   const isAdmin = user?.role === 'admin'
   return (
     <Section title="People on this box" actions={isAdmin && <button type="button" className="btn primary sm" onClick={() => setEdit({ role: 'member' })}><Icon name="plus" size={14} />Add person</button>}
-      sub="Everyone signs in with their own account and listens with their own Audiobookshelf account: their own place in every book, history, bookmarks and Up next. Admins manage accounts; they don't see anyone else's listening.">
+      sub="Everyone signs in with their own account: their own place in every book, history, bookmarks and Up next. Admins manage accounts; they don't see anyone else's listening.">
       <div className="set-people">
         {users.map(u => (
           <div key={u.id} className="set-person">
@@ -290,7 +290,7 @@ function Users() {
       </div>
       {status?.auth_mode !== 'local' && <p className="muted small mt">Auth mode is <code>{status?.auth_mode}</code>: users are created automatically on first visit.</p>}
       {edit && <UserModal user={edit} local={status?.auth_mode === 'local'} onClose={() => setEdit(null)} onSaved={() => { setEdit(null); reloadMeta() }} />}
-      {del && <Confirm confirmLabel="Remove" title={`Remove ${del.name || del.email}?`} message="Their account is deleted here with their listening history and Up next. Their Audiobookshelf account stays." onCancel={() => setDel(null)}
+      {del && <Confirm confirmLabel="Remove" title={`Remove ${del.name || del.email}?`} message="Their account is deleted here with their listening history and Up next. Shared library books stay." onCancel={() => setDel(null)}
         onConfirm={async () => { const d = del; setDel(null); try { await api.del(`${V1}/users/${d.id}`); await reloadMeta(); toast('Removed') } catch (e) { toast(errMsg(e), 'err') } }} />}
     </Section>
   )
@@ -364,7 +364,7 @@ function Tokens() {
   }
   return (
     <div className="stack loose">
-      <Section title="Audiobookshelf apps" icon="headphones" sub="The Audiobookshelf app, AudioBooth, Plappa, ShelfPlayer and other Audiobookshelf players can use Pocket Audiobooks as their server: the same books, your place, bookmarks and history, with your own Audiobookshelf account underneath.">
+      <Section title="Audiobookshelf apps" icon="headphones" sub="The Audiobookshelf app, AudioBooth, Plappa, ShelfPlayer and other Audiobookshelf players can use Pocket Audiobooks as their server: the same books, your place, bookmarks and history, using your own Pocket Audiobooks account.">
         <dl className="set-dl">
           <div><dt>Server address</dt><dd><code>{base}</code> <span className="muted small">(or <code>{base}/audiobookshelf</code> if the app wants a path)</span></dd></div>
           <div><dt>Username</dt><dd><code>{user?.email}</code></dd></div>
@@ -375,7 +375,7 @@ function Tokens() {
         <p className="muted small mt">Sign in with username and password (not OpenID). Your Pocket Audiobooks password works too where you have one; the app then gets its own token.</p>
       </Section>
       <Section title="Connect Pocket Homelab" icon="smartphone" sub="Listen in the app with the same library and saved progress.">
-        <p>In the app’s Audiobookshelf settings, set the server to <code>{base}</code> and paste a personal token created below.</p>
+        <p>With Pocket Core, select Pocket Audiobooks for your device and refresh its configuration. Your paired device token handles sign-in automatically.</p><p>For a manual connection, set the server to <code>{base}</code> in the app’s Audiobookshelf settings and use a personal token created below.</p>
         <p className="muted">If you paired through Pocket Core, choose Pocket Audiobooks under Devices → Apps on your devices, then refresh the app’s Core configuration. Core supplies the address and your device token.</p>
       </Section>
       <Section title="Personal tokens" icon="key" sub={<>Use as <code>Authorization: Bearer &lt;token&gt;</code>. A token acts as you. See <code>docs/api.md</code>.</>}>
@@ -440,7 +440,7 @@ function About() {
     ['Runtime', `${String(data.go)} · ${String(data.os)}/${String(data.arch)}`],
     ['Time zone', String(data.timezone)],
     ['Sign-in', String(data.auth_mode)],
-    ['Audiobookshelf', data.abs_url ? <code key="n">{String(data.abs_url)}</code> : 'each person enters their own'],
+    ['Library server', data.backend==='native'?'Pocket Audiobooks':(data.abs_url ? <code key="n">{String(data.abs_url)}</code> : 'Audiobookshelf')],
     ['Pocket Core', core.configured ? (core.registered ? <span key="c">registered at <code>{core.url}</code></span> : <span key="c" className="danger-text">not registered: {core.error}</span>) : 'not configured'],
     ['Database', <span key="db"><code>{String(data.db_path)}</code> · {fmtBytes(Number(data.db_bytes))}</span>],
     ['People', `${counts.users ?? 0} accounts on this box`],
@@ -451,7 +451,7 @@ function About() {
         <img src="/favicon.svg" alt="" width={48} height={48} />
         <div>
           <h3>Pocket Audiobooks</h3>
-          <p className="muted small">Audiobooks for the whole household. Audiobookshelf keeps the files, the metadata and everyone's place, and serves the phone apps; Pocket Audiobooks adds a calm web player that keeps your place in step with them, series and authors, Up next, and a listening history it owns with stats and streaks. One binary, one SQLite file.</p>
+          <p className="muted small">Audiobooks for the whole household: your library, chapters, bookmarks and saved places, with a web player and connected apps. Browse by author or series, keep an Up next list and follow your listening history. One Go server and one SQLite database.</p>
         </div>
       </div>
       <div className="set-stats">

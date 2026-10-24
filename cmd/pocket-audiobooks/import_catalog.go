@@ -39,7 +39,8 @@ func runCatalogImport(args []string) {
 		fmt.Fprintln(os.Stderr, "read account map:", err)
 		os.Exit(1)
 	}
-	_, _, st := mustLoad()
+	_, _, st, lease := mustLoadExclusive()
+	defer lease.Close()
 	defer st.Close()
 	report, err := (&library.Catalog{DB: st.DB}).Import(context.Background(), opt)
 	if err != nil {

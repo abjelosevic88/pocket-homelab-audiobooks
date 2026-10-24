@@ -1,6 +1,6 @@
 import React, { lazy, Suspense } from 'react'
 import ReactDOM from 'react-dom/client'
-import { BrowserRouter, Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom'
+import { BrowserRouter, Navigate, Outlet, Route, Routes, useLocation, useParams } from 'react-router-dom'
 import './styles/base.css'
 import './styles/app.css'
 import './styles/shared.css'
@@ -42,6 +42,10 @@ function Signed() {
   return <Gate><PlayerProvider><Outlet /></PlayerProvider></Gate>
 }
 
+function ClientLink({kind}:{kind:'book'|'series'|'author'}) {
+ const {id='',library=''}=useParams()
+ return <Navigate replace to={`/${kind}/${encodeURIComponent(id)}${library?'?library='+encodeURIComponent(library):''}`}/>
+}
 function App() {
   return (
     <Routes>
@@ -55,6 +59,9 @@ function App() {
           <Route path="/library" element={<Library view="books" key="books" />} />
           <Route path="/library/series" element={<Library view="series" key="series" />} />
           <Route path="/library/authors" element={<Library view="authors" key="authors" />} />
+          <Route path="/item/:id" element={<ClientLink kind="book"/>}/>
+          <Route path="/library/:library/series/:id" element={<ClientLink kind="series"/>}/>
+          <Route path="/library/:library/authors/:id" element={<ClientLink kind="author"/>}/>
           <Route path="/book/:id" element={<BookPage />} />
           <Route path="/series/:id" element={<SeriesPage />} />
           <Route path="/author/:id" element={<AuthorPage />} />

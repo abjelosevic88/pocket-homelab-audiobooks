@@ -1,6 +1,6 @@
 <p align="center"><img src="web/public/favicon.svg" width="72" alt=""></p>
 <h1 align="center">Pocket Audiobooks</h1>
-<p align="center">Audiobooks for the whole household, on top of Audiobookshelf: a calm web player that keeps your place in step with the phone apps (continue on the phone, continue here), chapters, bookmarks, speed and a sleep timer, series and authors, Up next, and a listening history it keeps from every Audiobookshelf app, with stats, streaks and a daily goal.<br>One Go binary, one SQLite file, one volume.</p>
+<p align="center">A standalone audiobook library and player for the household. Scan your files, browse authors and series, listen with chapters, bookmarks, speed and a sleep timer, and keep your place across the web and Pocket Homelab.<br>Go, SQLite, React and local FFmpeg. No Audiobookshelf server required.</p>
 <p align="center">
   <a href="https://github.com/abjelosevic88/pocket-homelab-audiobooks/actions"><img src="https://github.com/abjelosevic88/pocket-homelab-audiobooks/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
   <a href="https://github.com/abjelosevic88/pocket-homelab-audiobooks/pkgs/container/pocket-homelab-audiobooks"><img src="https://img.shields.io/badge/ghcr.io-amd64%20%7C%20arm64%20%7C%20armv7-blue" alt="image"></a>
@@ -18,7 +18,7 @@
   </tr>
   <tr>
     <td align="center"><sub>A book: your place, chapters to jump to, bookmarks, the rest of its series, how long you've listened.</sub></td>
-    <td align="center"><sub>The player: chapters, speed, sleep timer (minutes or the end of the chapter), bookmarks; your place goes back to Audiobookshelf every 15 s.</sub></td>
+    <td align="center"><sub>The player: chapters, speed, sleep timer (minutes or the end of the chapter), bookmarks; your place is saved every 15 s.</sub></td>
   </tr>
   <tr>
     <td width="50%"><img src="docs/screenshots/desktop-library.png" alt="The library"></td>
@@ -33,7 +33,7 @@
     <td width="50%"><img src="docs/screenshots/desktop-history.png" alt="History by day"></td>
   </tr>
   <tr>
-    <td align="center"><sub>Stats from your history — here and in every Audiobookshelf app: time, finished books, streaks.</sub></td>
+    <td align="center"><sub>Stats from your history — here and in connected players: time, finished books, streaks.</sub></td>
     <td align="center"><sub>History, every listening session by day, with the device it played on.</sub></td>
   </tr>
 </table>
@@ -44,96 +44,90 @@
   <img src="docs/screenshots/desktop-book-dark.png" width="420" alt="A book in dark mode">
 </p>
 
-## Upload audiobooks
+## Start
 
-Open **Library → Upload**, choose a book library and folder, then select the files for one book. Add its title
-and optional author/series, and press **Upload book**. Multiple audio tracks, covers and companion ebooks can
-be uploaded together. The dialog shows transfer progress; after scanning, use **Refresh** to see the new book.
-Your Audiobookshelf account needs upload permission. The default limit is 10 GiB per upload, configurable with
-`MAX_AUDIOBOOK_UPLOAD_BYTES`. Files with matching names in the same destination book folder are replaced.
+```sh
+cp .env.example .env
+mkdir -p data audiobooks
+# The container runs as UID/GID 1000; give it access to these directories.
+docker compose up -d
+```
 
-## Use it from Audiobookshelf apps
+Open port 8080 and create the first account. Under **Settings → Libraries**, add
+`/audiobooks` and start a scan. Mount additional folders in Compose before adding
+them. Enable periodic scans to pick up new files automatically. Keep each book
+in its own folder; multi-file books and CD/disc subfolders are supported.
 
-The Audiobookshelf app, AudioBooth, Plappa, ShelfPlayer and other Audiobookshelf players can sign in to Pocket
-Audiobooks as if it were Audiobookshelf: server address = this app's address (or `…/audiobookshelf`), username = your
-email, password = an **app password** from **Settings → Apps & API → Audiobookshelf apps**. Everything goes on to
-Audiobookshelf as your own account — your place, bookmarks and downloads work as before, the listening lands in your
-history here, and your Audiobookshelf key never reaches the phone. Details in [docs/api.md](docs/api.md).
+## Listening and library management
+
+- Chapters, speed per book, skip controls, sleep timer, bookmarks, lock-screen
+  controls and Up next. Direct audio and local HLS conversion work across browsers.
+- Saved positions, completion, history, statistics and device handoff. The web
+  player retries unsent progress reports after reconnecting.
+- Search, filters, authors, series, collections and personal playlists.
+- Upload a book’s audio, cover and companion ebooks together. Files publish into
+  a new book folder after validation; originals are not overwritten. Default
+  upload limit: 10 GiB, configurable with `MAX_AUDIOBOOK_UPLOAD_BYTES`.
+- Edit metadata, chapters and covers, preview provider matches, make bulk edits,
+  reorder/exclude tracks, and export metadata or original-file downloads.
+- Recoverable Trash, application backup/restore, M4B generation and metadata
+  embedding. Generated files can be selected for playback while originals stay.
+- EPUB/PDF reading and existing podcast support are available too. This is an
+  audiobook app, not a promise of every Audiobookshelf feature.
 
 ## Connect Pocket Homelab
 
-Use this app's base URL in Pocket Homelab's **Audiobookshelf** settings and a personal token from
-**Settings → API & shortcuts**. The existing native player can browse, play, download, bookmark and save progress
-through Pocket Audiobooks. Audiobookshelf continues to store the library and listening position underneath.
+With Pocket Core, select **Pocket Audiobooks** under **Devices → Apps on your
+devices → Audiobooks**, then refresh the app’s Core configuration. The paired
+device token signs in automatically; no app password is needed.
 
-With Pocket Core, select **Pocket Audiobooks** under **Devices → Apps on your devices → Audiobooks** and refresh
-the app's Core configuration. Core supplies the gateway URL and the device's own token using the settings the
-existing app already understands; no phone app rebuild is required.
+For a manual connection, use this app’s base URL and a personal token from
+**Settings → Apps & API** in the native app’s Audiobookshelf fields. The
+compatibility API supports the existing player’s browse, playback, download,
+bookmark and progress calls. The library and listening data live in Pocket
+Audiobooks itself.
 
+Other compatible players can use username/password sign-in with your Pocket
+email and a separately revocable app password. Third-party apps can use different
+API extensions; compatibility is tested at the protocol level, not on every app.
 
-## Why on top of Audiobookshelf
+## Migration and backups
 
-Audiobookshelf already does the server part very well — scanning folders into books, chapters, Audible and Google
-metadata and covers, transcoding, and the API the phone apps speak (offline downloads, CarPlay). Pocket Audiobooks
-doesn't replace any of that: it plays your library *through* Audiobookshelf, with each person's own account, and
-adds what the listening around the books needs — a player that keeps your place in step with the phone, a history
-you own, Up next, stats and streaks, and a place among the other Pocket apps. Keep the phone apps: your place,
-finished books and bookmarks are shared. More in [docs/design.md](docs/design.md).
+The migration command reads a consistent Audiobookshelf SQLite snapshot, maps
+media folders and explicitly maps retained accounts. It preserves identifiers,
+metadata, chapters, files, personal progress, bookmarks and listening history.
+It defaults to a dry run and refuses a nonempty native catalog. See
+[migration and verification](docs/standalone-migration.md).
 
-## What it does
+Back up the application bundle **and the media folders**. Bundles include SQLite,
+managed artwork, the encryption key and Core credentials; they do not contain
+original audio or ebooks. Restore verifies checksums before creating a new data
+directory. See [backup and restore](docs/backup.md).
 
-**Listening**
-- Home: pick up where you left off, everything in progress, Up next, the next book of series you started, recently
-  added, books you haven't started, listen again.
-- A player that stays at the bottom while you browse: the files as they are when the browser can play them (books
-  in one file or in fifty), HLS through Audiobookshelf when it can't. Chapters, speed per book, skip back/forward,
-  a few seconds back after a long pause, a sleep timer, bookmarks, lock-screen and headphone controls, keyboard
-  shortcuts. When a book ends, the next one from Up next or its series.
-- Your place goes back to Audiobookshelf every 15 seconds and on pause, as a real playback session: the phone picks
-  up where the web stopped. When the phone plays, the web shows it — **Continue here** takes over at that moment.
-- Library by library: books (filters, sorting, genres, narrators), series, authors, search across everything (⌘K).
+## Pocket integrations
 
-**Yours**
-- A listening history Pocket Audiobooks keeps: every session in every Audiobookshelf app, copied every few minutes,
-  back to the first one. Stats: time listened, finished books, top books, authors, narrators, genres, devices,
-  weekdays and hours, streaks and an optional daily goal. A push when you finish a book, a weekly recap.
-- Mark finished or not, start over, take a book off Continue listening — written to Audiobookshelf.
+Pocket Core provides sign-in and paired-device authentication. Pocket Day and
+Pocket Bookshelf read the signed-in person’s listening through enabled Core links.
+Homepage has a dashboard endpoint, and personal notifications cover finished
+books and the weekly recap.
 
-**The Pocket apps**
-- With [Pocket Core](https://github.com/abjelosevic88/pocket-homelab-core): one sign-in, each person's
-  Audiobookshelf login from Core, Pocket Day and Pocket Bookshelf can read what you listened to
-  (`listening:read`), and an `audiobooks.finished` event.
-- Strictly per person: history, Up next and settings are yours; admins don't see anyone else's listening.
+[Configuration](docs/configuration.md) · [API](docs/api.md) ·
+[Reverse proxy](docs/reverse-proxy.md) · [Design](docs/design.md)
 
-## Run it
+## Development
 
 ```sh
-docker run -d --name pocket-audiobooks -p 8080:8080 -v ./data:/data \
-  -e BASE_URL=https://audio.example.com -e SECURE_COOKIES=true \
-  -e AUDIOBOOKSHELF_URL=http://audiobookshelf:80 \
-  ghcr.io/abjelosevic88/pocket-homelab-audiobooks:latest
+npm ci --prefix web
+npm run build --prefix web
+go test ./...
+go run ./cmd/pocket-audiobooks
 ```
 
-Open it, create the first account, then connect Audiobookshelf under Settings → Audiobookshelf: an API key made for
-your account (Audiobookshelf → Settings → API Keys), or your password. See
-[docs/configuration.md](docs/configuration.md) for every option, [docs/api.md](docs/api.md) for the API (and a
-Homepage widget), [docs/reverse-proxy.md](docs/reverse-proxy.md) and [docs/backup.md](docs/backup.md).
+The historical screenshots above use a generated public-domain demo library.
+The native browser acceptance test exercises the current independent backend;
+it requires a local Chromium CDP endpoint and FFmpeg/FFprobe. It never runs against
+production data.
 
-Try it with a demo library: [scripts/demo-library/make.sh](scripts/demo-library/make.sh) runs a throwaway
-Audiobookshelf with 22 public-domain classics at their real lengths (generated silent audio with chapters; covers
-and descriptions matched on Audible by Audiobookshelf) and six weeks of a demo listener's history. The screenshots
-above are that library; [scripts/screenshots.mjs](scripts/screenshots.mjs) is also the browser test.
-
-## Built with
-
-Go, chi, SQLite (modernc), React 19, Vite, hls.js. Works with Audiobookshelf 2.26+ (API keys; earlier versions with a
-password); works alone, and with [Pocket Core](https://github.com/abjelosevic88/pocket-homelab-core) for single
-sign-on, paired phones and the links between apps. MIT licensed.
-
-## Standalone server development
-
-An independent Go backend is being built in stages using the existing Go,
-SQLite, React/TypeScript and Pocket Core stack. Native catalog import, playback,
-progress, local FFmpeg conversion, live client updates, scanning, uploads and
-metadata/chapter editing are implemented behind a backend switch. The deployed
-service still uses Audiobookshelf; full feature parity and migration are not complete. See [migration stages and verification](docs/standalone-migration.md).
+The old upstream gateway remains available only with explicit
+`MEDIA_BACKEND=audiobookshelf` for rollback during migration. Native mode is the
+default and does not use that server.

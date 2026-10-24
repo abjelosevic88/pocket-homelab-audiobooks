@@ -30,22 +30,19 @@ Integration values seed the owner's (first admin's) own settings on first start,
 | `OIDC_ISSUER` / `OIDC_CLIENT_ID` / `OIDC_CLIENT_SECRET` | – | Sign in with an OpenID Connect provider (PocketID, Authelia, Authentik, Keycloak…). The callback is `BASE_URL/api/v1/auth/oidc/callback`. With Pocket Core none of these are needed. |
 | `OIDC_NAME` / `OIDC_AUTO_CREATE` | `single sign-on` / `true` | Button label; give an unknown verified email a member account |
 
-## Audiobookshelf
+## Library server
 
-Every person listens with their **own** Audiobookshelf account, so their place in each book, finished marks and
-bookmarks stay theirs and the Audiobookshelf phone apps agree with the web. Under Settings → Audiobookshelf they
-either paste an **API key** made for their account (Audiobookshelf → Settings → API Keys, by an admin) or sign in
-with their **password** (only the refresh token Audiobookshelf hands out is kept, never the password). Both are
-sealed with `DATA_DIR/secret.key`. With Pocket Core, Core can hold the login instead (service type
-`audiobookshelf`: `TOKEN`, plus `USER_ID` so a box-wide admin key is never used as somebody else).
+`MEDIA_BACKEND=native` is the default. Audio, ebooks and imported artwork live in
+mounted folders; library metadata and personal state live in SQLite. Add a mounted
+folder under Settings → Libraries, scan it, and optionally enable periodic scans.
+FFmpeg and FFprobe are included in the container (`FFMPEG_PATH` and `FFPROBE_PATH`
+can override executable paths). The process needs read access to the media and
+write access for uploads, Trash, metadata tools and podcast downloads.
 
-| Variable | Default | What it does |
-|---|---|---|
-| `AUDIOBOOKSHELF_URL` | – | Audiobookshelf's address as this container reaches it (`http://audiobookshelf:80`). Without it, each person types an address under Settings. |
-| `AUDIOBOOKSHELF_PUBLIC_URL` | – | What a browser opens for "Open in Audiobookshelf" |
-| `AUDIOBOOKSHELF_TOKEN` | – | The owner's account, copied once into their connection: an API key of that account. Progress is written for the account the key belongs to. |
-| `AUDIOBOOKSHELF_USER` + `AUDIOBOOKSHELF_PASSWORD` | – | Or the owner's user name and password (signed in once; only the refresh token is kept). Needs local sign-in on in Audiobookshelf. |
-| `SYNC_EVERY` | `5m` | How often each person's listening sessions are copied from Audiobookshelf (every app's, this one's included) |
+`MEDIA_BACKEND=audiobookshelf` retains the historical gateway for migration
+rollback. Only that mode uses `AUDIOBOOKSHELF_URL`, `AUDIOBOOKSHELF_PUBLIC_URL`,
+`AUDIOBOOKSHELF_TOKEN` or `AUDIOBOOKSHELF_USER`/`AUDIOBOOKSHELF_PASSWORD`, and
+`SYNC_EVERY`. Native mode does not connect to Audiobookshelf or use its credentials.
 
 ## Personal integrations
 
@@ -57,7 +54,7 @@ sealed with `DATA_DIR/secret.key`. With Pocket Core, Core can hold the login ins
 
 | Variable | Default | What it does |
 |---|---|---|
-| `CORE_URL` / `CORE_REGISTRATION_KEY` | – | [Pocket Core](https://github.com/abjelosevic88/pocket-homelab-core): register on start (the key is needed once; the app token is kept in `$DATA_DIR/core.token`), "Sign in with Pocket Core", accept the tokens Core gives paired phones, get each person's Audiobookshelf login from Core, publish `audiobooks.finished`, offer `listening:read` to other Pocket apps (Pocket Day, Pocket Bookshelf) |
+| `CORE_URL` / `CORE_REGISTRATION_KEY` | – | [Pocket Core](https://github.com/abjelosevic88/pocket-homelab-core): register on start (the key is needed once; the app token is kept in `$DATA_DIR/core.token`), "Sign in with Pocket Core", accept the tokens Core gives paired phones, publish `audiobooks.finished`, offer `listening:read` to other Pocket apps (Pocket Day, Pocket Bookshelf) |
 | `CORE_APP_URL` | `BASE_URL` | How Core reaches this app for health checks (e.g. `http://host.docker.internal:8202`) |
 
 With `CORE_URL` empty the app behaves exactly as a standalone app: every Core-only choice stays visible, greyed out
@@ -66,9 +63,9 @@ with a note.
 ## Audiobook uploads
 
 `MAX_AUDIOBOOK_UPLOAD_BYTES` caps one multipart audiobook upload (default `10737418240`, 10 GiB). This is separate
-from `MAX_UPLOAD_BYTES`, the smaller limit used for data imports. Uploads stream to Audiobookshelf using the
-signed-in person's upload permission. Allow an equivalent request size and sufficiently long upload timeouts
-in any reverse proxy. Audiobookshelf requires free space in its metadata temporary directory and library folder.
+from `MAX_UPLOAD_BYTES`, the smaller limit used for data imports. Native uploads validate media in a private staging folder before publishing a new book. The
+signed-in person needs upload permission. Allow an equivalent request size and sufficiently
+long upload timeouts in the reverse proxy, and free space in the destination library.
 
 ### Native metadata providers
 

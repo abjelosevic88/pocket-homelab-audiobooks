@@ -1,13 +1,23 @@
 # Standalone Pocket Audiobooks migration
 
-Status: native playback and core library workflows implemented and rehearsed; the live application still uses
-Audiobookshelf. Full feature parity and cutover are **not complete**.
+Status: final validation and cutover in progress; production still uses Audiobookshelf until the final snapshot is imported.
 
-The owner selected an independent Go implementation, replacing every feature in
-stages. Keep the existing Pocket stack: Go, SQLite, React/TypeScript, one app
-container and Pocket Core authentication. No forked server or separate Node
-backend is part of the replacement. Python is used only for operator preflight
-scripts, not by the application at runtime.
+## Accepted scope (updated 2026-10-24)
+
+The owner clarified that this should be an independent audiobook app with standard
+features, **not a one-to-one Audiobookshelf replacement**. The release criteria are
+library scanning/uploads, metadata and covers, search/filtering, authors/series,
+chapters, direct and transcoded playback, speed/sleep controls, progress/bookmarks,
+downloads, listening history/statistics, account isolation, backups and the existing
+Pocket Core/native-app/Day/Bookshelf connections. Migrate only the source `root`
+account and preserve its books and listening state. Keep the Pocket stack: Go,
+SQLite, React/TypeScript and one app container.
+
+Already implemented podcast, reader, sharing and conversion features remain usable.
+Unimplemented specialized providers, ereader delivery, comic readers, arbitrary
+file regrouping and exact third-party-client parity are outside this release.
+The historical parity matrix below records implementation coverage; pending rows
+are no longer a requirement to recreate every Audiobookshelf feature.
 
 ## Stages and current evidence
 
@@ -97,9 +107,9 @@ claim that existing clients will keep working.
 
 ## Feature acceptance matrix
 
-Every row must have implemented behavior, meaningful tests and migration evidence
-before claiming full parity. Existing wrappers and upstream proxies do not count
-as a standalone implementation.
+This is the earlier parity inventory, retained for reference. The standard audiobook
+release scope above supersedes the original requirement for every row. No full
+Audiobookshelf-parity claim is made.
 
 | Area | Required behavior | Standalone verification |
 | --- | --- | --- |
@@ -108,7 +118,7 @@ as a standalone implementation.
 | Book ingestion | Single/multiple audio files, ebooks, tags, sidecars, chapters, covers, track order | Audio tags, natural ordering, embedded chapters, covers and JSON/text sidecars verified; legacy metadata.abs import, CD/disc grouping and tag-aware track order implemented |
 | Library management | Uploads, metadata/chapter editing, bulk operations, download, safe deletion | Validated uploads, metadata/chapters/covers and single-file and streamed book ZIP downloads implemented; recoverable deletion/restore/purge, portable metadata exports and atomic bulk metadata editing implemented |
 | Metadata | Built-in/custom providers, matching, covers, authors, series, genres, tags, narrators | Open Library, Google Books and custom provider search/preview, detail lookup and cover fetching implemented; Open Library live contract and browser selection verified. Other built-in providers and automated matching pending |
-| Browse | Search, filters, sorts, pagination, shelves, series and authors | Pending |
+| Browse | Search, filters, sorts, pagination, shelves, series and authors | Native filters, numeric/date sorts, safe pagination, series collapsing, permission-filtered search/stats and book/episode shelves implemented |
 | Playback | Direct/range streaming, multi-file timeline, transcoding/HLS, seeking | Direct/multi-file playback and local seekable FFmpeg/HLS verified |
 | Personal state | Progress, bookmarks, completion, hidden items, history, statistics | Native writes, retries, resume/finish and isolation verified |
 | Device sync | Sessions, handoff, retries, offline reports, conflicts, live updates | Native engine, web outbox and cumulative offline session uploads verified, including concurrent/reordered retries, imported-session reconciliation and newer-position protection; legacy online delta-only clients need stable report IDs for exact retry accounting |

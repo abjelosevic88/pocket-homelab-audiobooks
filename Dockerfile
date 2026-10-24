@@ -33,7 +33,7 @@ USER app
 WORKDIR /data
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 CMD curl -fsS http://localhost:8080/healthz || exit 1
 LABEL org.opencontainers.image.title="Pocket Audiobooks" \
-      org.opencontainers.image.description="Audiobooks for the household on top of Audiobookshelf: a web player that keeps your place in step with the phone apps, chapters, bookmarks, sleep timer, series and authors, up next, and a listening history with stats." \
+      org.opencontainers.image.description="Standalone audiobook library and player with chapters, bookmarks, saved progress, downloads and Pocket Core integration." \
       org.opencontainers.image.source="https://github.com/abjelosevic88/pocket-homelab-audiobooks" \
       org.opencontainers.image.licenses="MIT"
 ENTRYPOINT ["pocket-audiobooks"]

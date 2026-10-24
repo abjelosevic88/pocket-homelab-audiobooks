@@ -33,8 +33,8 @@ jobs:
           sleep 2
           curl -fsS http://localhost:8080/healthz
           curl -fsS http://localhost:8080/api/v1/dashboard | grep -q week_seconds
-          curl -sS http://localhost:8080/api/v1/home | grep -q not_connected
-          curl -fsS http://localhost:8080/api/v1/connection | grep -q '"connected":false'
+          curl -fsS http://localhost:8080/api/v1/home | grep -q libraries
+          curl -fsS http://localhost:8080/api/v1/connection | grep -q '"backend":"native"'
           curl -fsS http://localhost:8080/ | grep -q '<div id="root">'
   docker:
     runs-on: ubuntu-latest

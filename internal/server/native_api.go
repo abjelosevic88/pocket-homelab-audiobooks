@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"database/sql"
-	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -625,7 +624,9 @@ func (s *Server) nativeLibraryAPI(w http.ResponseWriter, r *http.Request, uid in
 	byItem := map[string]nativeObject{}
 	for _, p := range progress {
 		m := nativeMap(p)
-		byItem[nativeString(m["libraryItemId"])] = m
+		if nativeString(m["episodeId"]) == "" {
+			byItem[nativeString(m["libraryItemId"])] = m
+		}
 	}
 	for _, it := range items {
 		it["userMediaProgress"] = byItem[nativeString(it["id"])]
@@ -654,111 +655,29 @@ func (s *Server) nativeLibraryAPI(w http.ResponseWriter, r *http.Request, uid in
 			}
 			all = append(all, v)
 		}
-		start := min(page*limit, len(all))
-		end := min(start+limit, len(all))
+		start, end := nativePage(len(all), page, limit)
 		respond(nativeObject{"results": all[start:end], "total": len(all), "limit": limit, "page": page})
 
 	case "items":
-		if filter := q.Get("filter"); filter != "" {
-			group, value, ok := strings.Cut(filter, ".")
-			if !ok {
-				writeErr(w, 400, "invalid filter")
-				return
-			}
-			b, err := base64.StdEncoding.DecodeString(value)
-			if err != nil {
-				writeErr(w, 400, "invalid filter")
-				return
-			}
-			value = string(b)
-			filtered := []nativeObject{}
-			for _, it := range items {
-				meta := nativeMetadata(it)
-				p := byItem[nativeString(it["id"])]
-				match := false
-				switch group {
-				case "progress":
-					switch value {
-					case "finished":
-						match = nativeBool(p["isFinished"])
-					case "not-started":
-						match = nativeNumber(p["currentTime"]) == 0 && !nativeBool(p["isFinished"])
-					case "in-progress":
-						match = nativeNumber(p["currentTime"]) > 0 && !nativeBool(p["isFinished"])
-					}
-				case "series", "authors":
-					for _, v := range nativeArray(meta[group]) {
-						if nativeString(nativeMap(v)["id"]) == value {
-							match = true
-							if group == "series" {
-								it["sequence"] = nativeMap(v)["sequence"]
-							}
-						}
-					}
-				case "genres", "narrators":
-					for _, v := range nativeArray(meta[group]) {
-						if nativeString(v) == value {
-							match = true
-						}
-					}
-				default:
-					writeErr(w, 400, "unsupported filter")
-					return
-				}
-				if match {
-					filtered = append(filtered, it)
-				}
-			}
-			items = filtered
+		group, value, e := nativeFilter(q.Get("filter"))
+		if e != nil {
+			writeErr(w, 400, e.Error())
+			return
 		}
-		sort.SliceStable(items, func(i, j int) bool {
-			a, b := items[i], items[j]
-			key := q.Get("sort")
-			av, bv := "", ""
-			numeric := false
-			an, bn := 0.0, 0.0
-			switch key {
-			case "addedAt":
-				numeric = true
-				an, bn = nativeNumber(a["addedAt"]), nativeNumber(b["addedAt"])
-			case "media.duration":
-				numeric = true
-				an, bn = nativeNumber(nativeMap(a["media"])["duration"]), nativeNumber(nativeMap(b["media"])["duration"])
-			case "sequence":
-				numeric = true
-				an, _ = strconv.ParseFloat(nativeString(a["sequence"]), 64)
-				bn, _ = strconv.ParseFloat(nativeString(b["sequence"]), 64)
-			case "progress":
-				numeric = true
-				an, bn = nativeNumber(byItem[nativeString(a["id"])]["progress"]), nativeNumber(byItem[nativeString(b["id"])]["progress"])
-			case "media.metadata.authorNameLF":
-				av, bv = nativeString(nativeMetadata(a)["authorName"]), nativeString(nativeMetadata(b)["authorName"])
-			case "media.metadata.publishedYear":
-				av, bv = nativeString(nativeMetadata(a)["publishedYear"]), nativeString(nativeMetadata(b)["publishedYear"])
-			default:
-				av, bv = nativeString(nativeMetadata(a)["title"]), nativeString(nativeMetadata(b)["title"])
+		filtered := []nativeObject{}
+		for _, it := range items {
+			if nativeMatchFilter(it, byItem[nativeString(it["id"])], group, value) {
+				filtered = append(filtered, it)
 			}
-			cmp := strings.Compare(strings.ToLower(av), strings.ToLower(bv))
-			if numeric {
-				if an < bn {
-					cmp = -1
-				} else if an > bn {
-					cmp = 1
-				} else {
-					cmp = 0
-				}
-			}
-			if cmp == 0 {
-				return nativeString(a["id"]) < nativeString(b["id"])
-			}
-			if q.Get("desc") == "1" {
-				return cmp > 0
-			}
-			return cmp < 0
-		})
-		start := min(page*limit, len(items))
-		end := min(start+limit, len(items))
-		respond(nativeObject{"results": items[start:end], "total": len(items), "limit": limit, "page": page})
+		}
+		items = filtered
+		if q.Get("collapseseries") == "1" && group != "series" {
+			items = nativeCollapseSeries(items)
+		}
+		nativeSortItems(items, q.Get("sort"), q.Get("desc") == "1", q.Get("seed"))
+		start, end := nativePage(len(items), page, limit)
+		respond(nativeObject{"results": items[start:end], "total": len(items), "limit": limit, "page": page, "sortBy": q.Get("sort"), "sortDesc": q.Get("desc") == "1", "filterBy": q.Get("filter"), "mediaType": current["mediaType"]})
+
 	case "series", "authors":
 		groups := s.nativeGroups(ctx, items, tail[0])
 		if len(tail) > 1 {
@@ -772,76 +691,105 @@ func (s *Server) nativeLibraryAPI(w http.ResponseWriter, r *http.Request, uid in
 			return
 		}
 		if tail[0] == "authors" {
-			respond(nativeObject{"authors": groups})
+			start, end := nativePage(len(groups), page, limit)
+			respond(nativeObject{"authors": groups, "results": groups[start:end], "total": len(groups), "limit": limit, "page": page})
 			return
 		}
-		start := min(page*limit, len(groups))
-		end := min(start+limit, len(groups))
+		start, end := nativePage(len(groups), page, limit)
 		respond(nativeObject{"results": groups[start:end], "total": len(groups)})
 	case "search":
-		text := strings.ToLower(q.Get("q"))
-		books := []any{}
+		term := strings.ToLower(strings.TrimSpace(q.Get("q")))
+		if term == "" {
+			writeErr(w, 400, "search text is required")
+			return
+		}
+		matches := []any{}
 		for _, it := range items {
 			m := nativeMetadata(it)
-			if strings.Contains(strings.ToLower(nativeString(m["title"])+" "+nativeString(m["authorName"])), text) && len(books) < limit {
-				books = append(books, nativeObject{"libraryItem": it})
+			text := nativeString(m["title"]) + " " + nativeString(m["subtitle"]) + " " + nativeString(m["authorName"]) + " " + nativeString(m["author"]) + " " + nativeString(m["narratorName"])
+			if strings.Contains(strings.ToLower(text), term) && len(matches) < limit {
+				matches = append(matches, nativeObject{"libraryItem": it})
 			}
 		}
 		authors, series := []any{}, []any{}
 		for _, g := range s.nativeGroups(ctx, items, "authors") {
-			if strings.Contains(strings.ToLower(nativeString(g["name"])), text) {
+			if strings.Contains(strings.ToLower(nativeString(g["name"])), term) && len(authors) < limit {
 				authors = append(authors, g)
 			}
 		}
 		for _, g := range s.nativeGroups(ctx, items, "series") {
-			if strings.Contains(strings.ToLower(nativeString(g["name"])), text) {
+			if strings.Contains(strings.ToLower(nativeString(g["name"])), term) && len(series) < limit {
 				series = append(series, nativeObject{"series": g, "books": g["books"]})
 			}
 		}
-		respond(nativeObject{"book": books, "authors": authors, "series": series, "narrators": []any{}})
+		result := nativeObject{"book": []any{}, "podcast": []any{}, "authors": authors, "series": series}
+		kind := "book"
+		if current["mediaType"] == "podcast" {
+			kind = "podcast"
+		}
+		result[kind] = matches
+		for _, key := range []string{"narrators", "tags", "genres"} {
+			counts := map[string]int{}
+			for _, it := range items {
+				list := nativeMetadata(it)[key]
+				if key == "tags" {
+					list = nativeMap(it["media"])[key]
+				}
+				for _, v := range nativeArray(list) {
+					name := nativeString(v)
+					if strings.Contains(strings.ToLower(name), term) {
+						counts[name]++
+					}
+				}
+			}
+			names := []string{}
+			for name := range counts {
+				names = append(names, name)
+			}
+			sort.Strings(names)
+			values := []any{}
+			for _, name := range names[:min(limit, len(names))] {
+				values = append(values, nativeObject{"name": name, "numBooks": counts[name], "numItems": counts[name]})
+			}
+			result[key] = values
+		}
+		respond(result)
+
 	case "personalized":
-		sort.SliceStable(items, func(i, j int) bool { return nativeNumber(items[i]["addedAt"]) > nativeNumber(items[j]["addedAt"]) })
-		continuing, finished := []any{}, []any{}
-		for _, it := range items {
-			p := byItem[nativeString(it["id"])]
-			if nativeBool(p["isFinished"]) {
-				finished = append(finished, it)
-			} else if nativeNumber(p["currentTime"]) > 0 && !nativeBool(p["hideFromContinueListening"]) {
-				continuing = append(continuing, it)
-			}
-		}
-		sort.SliceStable(continuing, func(i, j int) bool {
-			return nativeNumber(nativeMap(nativeMap(continuing[i])["userMediaProgress"])["lastUpdate"]) > nativeNumber(nativeMap(nativeMap(continuing[j])["userMediaProgress"])["lastUpdate"])
-		})
-		respond([]any{nativeObject{"id": "continue-listening", "type": "book", "entities": continuing[:min(limit, len(continuing))]}, nativeObject{"id": "recently-added", "type": "book", "entities": items[:min(limit, len(items))]}, nativeObject{"id": "listen-again", "type": "book", "entities": finished[:min(limit, len(finished))]}})
+		respond(s.nativeShelves(items, progress, limit))
+
 	case "stats":
-		duration := 0.0
-		for _, it := range items {
-			duration += nativeNumber(nativeMap(it["media"])["duration"])
+		respond(s.nativeLibraryStats(r, items))
+	case "narrators":
+		respond(nativeObject{"narrators": nativeNarrators(items)})
+	case "recent-episodes", "opml", "podcast-titles", "episode-downloads":
+		if current["mediaType"] != "podcast" {
+			writeErr(w, 404, "podcast library not found")
+			return
 		}
-		respond(nativeObject{"totalItems": len(items), "totalDuration": duration, "numAuthors": len(s.nativeGroups(ctx, items, "authors")), "numSeries": len(s.nativeGroups(ctx, items, "series"))})
+		s.nativePodcastLibrary(w, r, uid, lib, tail[0], items, progress, limit, page)
+	case "download":
+		ids := strings.Split(q.Get("ids"), ",")
+		allowed := map[string]bool{}
+		for _, it := range items {
+			allowed[nativeString(it["id"])] = true
+		}
+		for _, id := range ids {
+			if !allowed[id] {
+				writeErr(w, 404, "book not found in library")
+				return
+			}
+		}
+		s.nativeDownload(w, r, uid, ids)
+
 	case "filterdata":
-		genres, tags, narrators := map[string]bool{}, map[string]bool{}, map[string]bool{}
-		for _, it := range items {
-			for _, v := range nativeArray(nativeMetadata(it)["genres"]) {
-				genres[nativeString(v)] = true
-			}
-			for _, v := range nativeArray(nativeMap(it["media"])["tags"]) {
-				tags[nativeString(v)] = true
-			}
-			for _, v := range nativeArray(nativeMetadata(it)["narrators"]) {
-				narrators[nativeString(v)] = true
-			}
-		}
-		keys := func(m map[string]bool) []string {
-			v := []string{}
-			for k := range m {
-				v = append(v, k)
-			}
-			sort.Strings(v)
-			return v
-		}
-		respond(nativeObject{"genres": keys(genres), "tags": keys(tags), "narrators": keys(narrators), "authors": s.nativeGroups(ctx, items, "authors"), "series": s.nativeGroups(ctx, items, "series")})
+		data := nativeFilterData(items)
+		data["authors"] = s.nativeGroups(ctx, items, "authors")
+		data["series"] = s.nativeGroups(ctx, items, "series")
+		data["authorCount"] = len(data["authors"].([]nativeObject))
+		data["seriesCount"] = len(data["series"].([]nativeObject))
+		respond(data)
+
 	default:
 		writeErr(w, 501, "native library operation not implemented yet")
 	}

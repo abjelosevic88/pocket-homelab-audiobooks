@@ -181,7 +181,7 @@ func (s *Server) handleSystemInfo(w http.ResponseWriter, r *http.Request) {
 		"core":      s.coreStatus(),
 		"auth_mode": s.cfg.AuthMode, "data_dir": s.cfg.DataDir, "db_path": s.cfg.DBPath, "db_bytes": size,
 		"uptime": time.Since(s.started).Round(time.Second).String(), "timezone": time.Now().Location().String(),
-		"counts": s.store.CountsFor(r.Context(), actorID(r.Context())), "abs_url": s.cfg.ABSURL,
+		"counts": s.store.CountsFor(r.Context(), actorID(r.Context())), "backend": s.cfg.Backend, "abs_url": s.cfg.ABSURL,
 	})
 }
 

@@ -158,7 +158,7 @@ func Load() (*Config, error) {
 		NativeFetchPrivateHosts: strings.Split(env("NATIVE_FETCH_PRIVATE_HOSTS", ""), ","),
 		FFprobe:                 env("FFPROBE_PATH", "ffprobe"),
 		FFmpeg:                  env("FFMPEG_PATH", "ffmpeg"),
-		Backend:                 strings.ToLower(env("MEDIA_BACKEND", "audiobookshelf")),
+		Backend:                 strings.ToLower(env("MEDIA_BACKEND", "native")),
 		ABSURL:                  strings.TrimRight(env("AUDIOBOOKSHELF_URL", ""), "/"),
 		ABSPublicURL:            strings.TrimRight(env("AUDIOBOOKSHELF_PUBLIC_URL", ""), "/"),
 		ABSToken:                env("AUDIOBOOKSHELF_TOKEN", ""),

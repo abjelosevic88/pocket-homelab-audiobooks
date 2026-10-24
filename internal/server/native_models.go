@@ -25,6 +25,20 @@ func nativeMap(v any) nativeObject {
 	return m
 }
 func nativeArray(v any) []any {
+	switch list := v.(type) {
+	case []string:
+		out := make([]any, len(list))
+		for i, v := range list {
+			out[i] = v
+		}
+		return out
+	case []nativeObject:
+		out := make([]any, len(list))
+		for i, v := range list {
+			out[i] = v
+		}
+		return out
+	}
 	a, _ := v.([]any)
 	if a == nil {
 		return []any{}
@@ -175,11 +189,43 @@ func (s *Server) nativeItem(ctx context.Context, uid int64, id string) (nativeOb
 	}
 	meta["narratorName"] = strings.Join(narrators, ", ")
 	media := nativeObject{"id": it.MediaID, "metadata": meta, "coverPath": m["coverPath"], "tags": it.Tags, "duration": it.Duration, "chapters": nativeArray(m["chapters"]), "audioFiles": nativeArray(m["audioFiles"]), "ebookFile": m["ebookFile"], "episodes": nativeArray(doc["episodes"])}
-	if it.MediaType == "podcast" {
-		files, e := s.catalog().Files(ctx, uid, it.ID)
-		if e != nil {
-			return nil, e
+	files, e := s.catalog().Files(ctx, uid, it.ID)
+	if e != nil {
+		return nil, e
+	}
+	size := int64(0)
+	audio := []any{}
+	libraryFiles := []any{}
+	invalid := false
+	indexed := map[string]nativeObject{}
+	for _, v := range nativeArray(m["audioFiles"]) {
+		d := nativeMap(v)
+		indexed[nativeString(d["ino"])] = d
+	}
+	for _, f := range files {
+		size += f.Size
+		file := nativeObject{"ino": f.ID, "metadata": nativeObject{"filename": f.Name, "size": f.Size}, "isSupplementary": f.Role == "supplement"}
+		libraryFiles = append(libraryFiles, file)
+		if f.Role == "audio" {
+			d := indexed[f.ID]
+			if d == nil {
+				d = nativeObject{}
+			}
+			d["ino"], d["duration"], d["index"], d["exclude"], d["mimeType"] = f.ID, f.Duration, f.Index, f.Excluded, f.MIME
+			md := nativeMap(d["metadata"])
+			md["filename"], md["size"] = f.Name, f.Size
+			d["metadata"] = md
+			audio = append(audio, d)
+			if !f.Excluded && f.Duration <= 0 {
+				invalid = true
+			}
 		}
+	}
+	media["size"] = size
+	if it.MediaType == "book" {
+		media["audioFiles"] = audio
+	}
+	if it.MediaType == "podcast" {
 		available := map[string]bool{}
 		for _, f := range files {
 			available[f.ID] = true
@@ -209,8 +255,12 @@ func (s *Server) nativeItem(ctx context.Context, uid int64, id string) (nativeOb
 		media["lastEpisodeCheck"], media["maxEpisodesToKeep"], media["maxNewEpisodesToDownload"] = subscription.LastCheck, subscription.Keep, subscription.MaxNew
 		media["scheduleTimezone"] = subscription.Timezone
 	}
-	media["numAudioFiles"], media["numTracks"], media["numChapters"] = len(nativeArray(m["audioFiles"])), len(nativeArray(m["audioFiles"])), len(nativeArray(m["chapters"]))
-	return nativeObject{"id": it.ID, "libraryId": it.LibraryID, "mediaType": it.MediaType, "addedAt": it.AddedAt, "updatedAt": it.UpdatedAt, "isMissing": it.Missing, "isInvalid": false, "media": media, "libraryFiles": nativeMap(doc["item"])["libraryFiles"]}, nil
+	media["numAudioFiles"], media["numTracks"], media["numChapters"] = len(audio), len(audio), len(nativeArray(m["chapters"]))
+	if it.MediaType == "podcast" {
+		media["numTracks"] = media["numEpisodes"]
+		media["numAudioFiles"] = media["numEpisodes"]
+	}
+	return nativeObject{"id": it.ID, "libraryId": it.LibraryID, "mediaType": it.MediaType, "addedAt": it.AddedAt, "updatedAt": it.UpdatedAt, "isMissing": it.Missing, "isInvalid": invalid, "size": size, "birthtimeMs": nativeMap(doc["item"])["birthtimeMs"], "mtimeMs": nativeMap(doc["item"])["mtimeMs"], "media": media, "libraryFiles": libraryFiles}, nil
 }
 func (s *Server) nativeItems(ctx context.Context, uid int64, lib string) ([]nativeObject, error) {
 	out := []nativeObject{}

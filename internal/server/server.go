@@ -112,18 +112,7 @@ func (s *Server) Bootstrap(ctx context.Context) error {
 		s.log.Info("admin user created from environment", "email", u.Email)
 	}
 	if owner := s.store.OwnerID(ctx); owner > 0 {
-		if s.cfg.Backend == "native" {
-			var count int
-			if err = s.store.DB.QueryRowContext(ctx, `SELECT (SELECT count(*) FROM catalog_accounts)+(SELECT count(*) FROM catalog_items)`).Scan(&count); err != nil {
-				return err
-			}
-			if count == 0 {
-				_, err = s.store.DB.ExecContext(ctx, `INSERT INTO catalog_accounts VALUES(?,?,?,1,0,'{"download":true,"upload":true,"update":true,"delete":true,"accessAllLibraries":true,"accessAllTags":true,"accessExplicitContent":true}')`, "pocket-owner", owner, "Owner")
-				if err != nil {
-					return err
-				}
-			}
-		}
+
 		if err := s.ownerReady(ctx, owner); err != nil {
 			return err
 		}
@@ -156,6 +145,14 @@ func (s *Server) Bootstrap(ctx context.Context) error {
 // own settings only, never into anyone else's — and demo data lands in the
 // owner's account.
 func (s *Server) ownerReady(ctx context.Context, owner int64) error {
+	if s.cfg.Backend == "native" {
+		// Setup through the web or Core must work without a server restart. Never
+		// grant an existing imported catalog to an unmapped identity.
+		_, err := s.store.DB.ExecContext(ctx, `INSERT INTO catalog_accounts(id,pocket_user_id,username,active,locked,permissions) SELECT 'pocket-owner',?,'Owner',1,0,'{"download":true,"upload":true,"update":true,"delete":true,"accessAllLibraries":true,"accessAllTags":true,"accessExplicitContent":true}' WHERE NOT EXISTS(SELECT 1 FROM catalog_accounts) AND NOT EXISTS(SELECT 1 FROM catalog_items)`, owner)
+		if err != nil {
+			return err
+		}
+	}
 	st, err := s.store.GetSettings(ctx, owner)
 	if err != nil {
 		return err
