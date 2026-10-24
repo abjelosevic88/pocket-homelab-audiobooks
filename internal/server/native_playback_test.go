@@ -279,6 +279,7 @@ func TestNativeBrowserAcceptance(t *testing.T) {
 	podCtx, cancelPodcasts := context.WithCancel(context.Background())
 	defer cancelPodcasts()
 	go s.nativePodcastLoop(podCtx)
+	go s.nativeToolsLoop(podCtx)
 	s.webFS, err = fs.Sub(web.Dist, "dist")
 	if err != nil {
 		t.Fatal(err)

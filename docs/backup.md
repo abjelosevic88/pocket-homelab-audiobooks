@@ -102,3 +102,9 @@ progress and bookmarks. Back up that server and its media as well.
 
 Each person can export/import their Pocket listening history, finishes and Up next
 as JSON. That export is not a full library or native account recovery format.
+
+Native audio conversion caches (`native-tools`) are rebuildable and excluded from
+application bundles. Files selected for playback live beside the originals and
+need the external media backup. Finish or cancel unfinished audio file adoption
+before creating an application bundle. Restored jobs whose cache is missing offer
+a rebuild; adopted library files are left unchanged.

@@ -107,6 +107,19 @@ func inspect(ctx context.Context, db *sql.DB) ([]Root, []string, error) {
 	if pending > 0 {
 		return nil, nil, errors.New("finish or recover pending Trash operations before making an application bundle; a database snapshot is still available")
 	}
+	// Older bundles predate media tools and remain restorable.
+	var toolTable int
+	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM sqlite_master WHERE type='table' AND name='catalog_tool_jobs'`).Scan(&toolTable); err != nil {
+		return nil, nil, err
+	}
+	if toolTable > 0 {
+		if err := db.QueryRowContext(ctx, `SELECT count(*) FROM catalog_tool_jobs WHERE status='applying'`).Scan(&pending); err != nil {
+			return nil, nil, err
+		}
+		if pending > 0 {
+			return nil, nil, errors.New("finish or cancel pending audio file adoption before making an application bundle")
+		}
+	}
 	roots := []Root{}
 	rows, err := db.QueryContext(ctx, `SELECT id,source_path,local_path FROM catalog_roots WHERE id<>'native-art' ORDER BY id`)
 	if err != nil {

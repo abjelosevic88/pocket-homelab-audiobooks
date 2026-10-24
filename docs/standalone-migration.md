@@ -118,7 +118,7 @@ as a standalone implementation.
 | Podcasts | Feeds/OPML, discovery, episode checks/downloads, scheduling and retention | RSS/Atom subscriptions, OPML import/export, checks, scheduled new-episode downloads, persistent/cancellable jobs, validation, missing-file repair and web/client playback implemented. Browser subscribe/download/play/save/reload verified. Recoverable keep-latest retention, episode/show deletion, Apple Podcasts search and persistent episode metadata/chapter editing implemented. Calendar schedules/timezones, download limits and failure/restart recovery implemented and imported. Client feed preview, creation, OPML parsing, checks, search, queue and episode read/edit/delete routes implemented; bulk import/matching and remaining library compatibility routes pending |
 | Sharing | RSS for books/series/collections, media shares, passwords/expiry/download permissions | Native RSS and share pages for books, series, collections and podcast episodes; password grants, expiry/revocation, current publisher permissions, per-episode media boundaries, original downloads and HLS fallback implemented. Browser create/play/resume/RSS/revoke and protocol isolation tests pass; source snapshot has no published feeds |
 | Accounts | Local/SSO authentication, per-user isolation, permissions, API-key lifecycle | Admin mapping/grants, library/tag/explicit permissions, locking, stale-update rejection and account ownership verified; full migration pending |
-| Tools | Metadata embedding, M4B conversion, jobs, cancellation, status | Pending |
+| Tools | Metadata embedding, M4B conversion, jobs, cancellation, status | Mixed-format M4B generation, lossless single-file metadata embedding, progress/cancellation/restart, checksummed output and recoverable adoption implemented; originals and personal state retained |
 | Operations | Backups/restore, logging, cache management, settings and notifications | Checksummed application bundles, safe verification/restore into a new directory, managed-art/credential recovery and database snapshots implemented; external media snapshots remain separate. Other operations parity pending |
 | Pocket integrations | Core pairing, Day, Bookshelf, Homepage, notifications and backup plans | Existing interfaces; standalone verification pending |
 
@@ -432,3 +432,28 @@ traversal, links, duplicate/absent files, truncated gzip and concurrent instance
 leases are tested. External media roots are listed explicitly, not represented as
 included audio backups. See [backup and restore](backup.md) for recovery and media
 snapshot requirements. No live deployment or source media was changed by these tests.
+
+## Native audio tools
+
+Book → More → Audio tools creates an M4B from the selected playback tracks, or
+embeds metadata in a single MP3, MP4/M4B or FLAC without re-encoding its audio.
+Jobs run in Go with bounded local FFmpeg processes, progress, cancellation and
+restart recovery. Current metadata, chapter times and the selected cover are
+embedded. A changed book or source file requires rebuilding the job.
+
+The generated file can be downloaded, then explicitly selected for playback.
+Selection copies it beside the book, keeps the original files excluded, preserves
+item IDs/progress/bookmarks/history and closes sessions using the previous track
+layout. Active playback blocks selection. A durable journal and no-overwrite
+publication recover crashes between file publication and catalog commit. Scans
+wait for unfinished adoption to be completed or cancelled. Originals can be
+selected again in Manage tracks. Deleting a generated download removes only the
+private job cache; an adopted library file stays in the library.
+
+Tests cover mixed-rate/mixed-format concatenation, metadata/chapter/cover
+embedding, exact decoded-audio preservation for metadata-only jobs, source and
+metadata changes, access isolation, playback conflicts, cancellation, missing
+output after restore, checksum tampering and interruption before/after file
+publication. Adopted audio survives a forced rescan. Generated caches under
+`DATA_DIR/native-tools` are disposable; application bundles keep the job records,
+while adopted files are covered by the external media backup.

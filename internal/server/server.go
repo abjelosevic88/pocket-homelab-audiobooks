@@ -54,6 +54,8 @@ type Server struct {
 	coreUIDMu sync.Mutex
 	coreUID   map[string]string // Core-held key → the Audiobookshelf user it belongs to
 
+	nativeToolsMu       sync.Mutex
+	nativeToolsCancel   map[string]context.CancelFunc
 	nativeShareAttempts shareAttempts
 	nativePodcastMu     sync.Mutex
 	nativePodcastCancel map[string]context.CancelFunc
@@ -69,7 +71,7 @@ type Server struct {
 
 // New creates a server.
 func New(cfg *config.Config, st *store.Store, log *slog.Logger, webFS fs.FS) *Server {
-	return &Server{nativePodcastCancel: map[string]context.CancelFunc{}, nativeFetchHTTP: fetch.Client(30*time.Second, cfg.NativeFetchPrivateHosts), nativeScanCancel: map[string]context.CancelFunc{}, nativeSockets: &nativeSocketHub{}, cfg: cfg, store: st, log: log, webFS: webFS, started: time.Now(), oidc: &oidcProvider{},
+	return &Server{nativeToolsCancel: map[string]context.CancelFunc{}, nativePodcastCancel: map[string]context.CancelFunc{}, nativeFetchHTTP: fetch.Client(30*time.Second, cfg.NativeFetchPrivateHosts), nativeScanCancel: map[string]context.CancelFunc{}, nativeSockets: &nativeSocketHub{}, cfg: cfg, store: st, log: log, webFS: webFS, started: time.Now(), oidc: &oidcProvider{},
 		absHTTP:    &http.Client{Timeout: 30 * time.Second},
 		streamHTTP: &http.Client{Transport: &http.Transport{Proxy: http.ProxyFromEnvironment, ResponseHeaderTimeout: 60 * time.Second, IdleConnTimeout: 90 * time.Second, MaxIdleConnsPerHost: 16}},
 		core:       core.New(cfg.CoreURL, core.Options{DB: st.DB, TokenFile: cfg.DataDir + "/core.token", UserAgent: cfg.UserAgent}),
@@ -133,9 +135,13 @@ func (s *Server) Bootstrap(ctx context.Context) error {
 		if err := s.catalog().RecoverTrash(ctx); err != nil {
 			s.log.Error("trash recovery requires attention", "error", err)
 		}
+		if err := s.recoverNativeTools(ctx); err != nil {
+			return err
+		}
 		go s.nativeScanLoop(ctx)
 		_, _ = s.store.DB.ExecContext(ctx, `UPDATE catalog_podcast_jobs SET status='failed',error='Interrupted by server restart' WHERE status='running'`)
 		go s.nativePodcastLoop(ctx)
+		go s.nativeToolsLoop(ctx)
 	}
 	_ = s.store.PurgeSessions(ctx)
 	go s.janitor(ctx)

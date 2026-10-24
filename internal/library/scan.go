@@ -172,8 +172,19 @@ func under(path, parent string) bool {
 // Existing IDs, edits, chapters and personal state survive incremental rescans.
 func (c *Catalog) Scan(ctx context.Context, uid int64, lib string, opt ScanOptions) (report ScanReport, err error) {
 	report = ScanReport{ID: newID(), LibraryID: lib}
+	if !mediaLayoutMu.TryLock() {
+		return report, fmt.Errorf("%w: a library scan or file change is active", ErrConflict)
+	}
+	defer mediaLayoutMu.Unlock()
 	if err = c.CanScan(ctx, uid, lib); err != nil {
 		return
+	}
+	var adopting int
+	if err = c.DB.QueryRowContext(ctx, `SELECT count(*) FROM catalog_tool_jobs j JOIN catalog_items i ON i.id=j.item_id WHERE i.library_id=? AND j.status='applying'`, lib).Scan(&adopting); err != nil {
+		return report, err
+	}
+	if adopting > 0 {
+		return report, fmt.Errorf("%w: finish or cancel pending audio file adoption first", ErrConflict)
 	}
 	var libraryRevision int64
 	if err = c.DB.QueryRowContext(ctx, `SELECT COALESCE((SELECT revision FROM catalog_library_state WHERE library_id=?),0)`, lib).Scan(&libraryRevision); err != nil {
@@ -278,6 +289,25 @@ func (c *Catalog) Scan(ctx context.Context, uid int64, lib string, opt ScanOptio
 	if err != nil {
 		return report, err
 	}
+	// A generated file is invisible to scans until its recovery journal commits.
+	pending := map[string]bool{}
+	pendingRows, e := c.DB.QueryContext(ctx, `SELECT apply_root,apply_path FROM catalog_tool_jobs WHERE apply_path<>'' AND status<>'applied'`)
+	if e != nil {
+		return report, e
+	}
+	for pendingRows.Next() {
+		var root, path string
+		if e = pendingRows.Scan(&root, &path); e != nil {
+			pendingRows.Close()
+			return report, e
+		}
+		pending[root+"/"+path] = true
+	}
+	e = pendingRows.Err()
+	pendingRows.Close()
+	if e != nil {
+		return report, e
+	}
 	seen := map[string]bool{}
 	newGroups := map[string]*scanBook{}
 	for _, folder := range folders {
@@ -313,6 +343,9 @@ func (c *Catalog) Scan(ctx context.Context, uid int64, lib string, opt ScanOptio
 				}
 				path = filepath.FromSlash(path)
 				key := folder.Root.id + "/" + path
+				if pending[key] {
+					return nil
+				}
 				sourcePath := filepath.Join(folder.Root.source, path)
 				longest, owner := -1, ""
 				for id, book := range books {
