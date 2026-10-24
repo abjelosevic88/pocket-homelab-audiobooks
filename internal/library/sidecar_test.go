@@ -104,3 +104,72 @@ func TestSidecarsImportPreserveEditsAndRollback(t *testing.T) {
 		t.Fatal("symlink escape")
 	}
 }
+
+func TestLegacyABMetadataAndJSONPriority(t *testing.T) {
+	f := setup(t)
+	apply(t, f)
+	ctx := context.Background()
+	c := f.catalog
+	if _, err := c.DB.Exec(`UPDATE catalog_accounts SET permissions=json_set(permissions,'$.update',json('true')) WHERE pocket_user_id=2`); err != nil {
+		t.Fatal(err)
+	}
+	root := t.TempDir()
+	dir := filepath.Join(root, "Legacy book")
+	os.Mkdir(dir, 0700)
+	os.WriteFile(filepath.Join(dir, "book.epub"), []byte("fixture"), 0600)
+	legacy := `;ABMETADATA2
+# exported book
+media=book
+title=Legacy = title
+authors=One Author, Two Author
+narrators=Voice One, Voice Two
+series=A series #2.5
+tags=["legacy", "tag"]
+explicit=N
+abridged=Y
+[DESCRIPTION]
+First = paragraph
+
+Second paragraph
+[CHAPTER]
+start=0
+end=0
+title=Chapter = one
+`
+	os.WriteFile(filepath.Join(dir, "metadata.abs"), []byte(legacy), 0600)
+	id, err := c.CreateLibrary(ctx, 2, library.NewLibrary{Name: "Legacy", Path: root, MediaType: "book"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = c.Scan(ctx, 2, id, library.ScanOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	page, _ := c.Items(ctx, 2, library.Query{LibraryID: id})
+	if len(page.Items) != 1 {
+		t.Fatal(page)
+	}
+	book, _ := c.Item(ctx, 2, page.Items[0].ID)
+	var doc map[string]any
+	json.Unmarshal(book.Document, &doc)
+	m := doc["media"].(map[string]any)
+	if book.Title != "Legacy = title" || book.Author != "One Author, Two Author" || m["description"] != "First = paragraph\n\nSecond paragraph" || m["abridged"] != true || len(book.Tags) != 2 {
+		t.Fatal(book, m)
+	}
+	os.WriteFile(filepath.Join(dir, "metadata.json"), []byte(`{"title":"JSON title"}`), 0600)
+	if _, err = c.Scan(ctx, 2, id, library.ScanOptions{ImportMetadata: true}); err != nil {
+		t.Fatal(err)
+	}
+	book, _ = c.Item(ctx, 2, book.ID)
+	if book.Title != "JSON title" {
+		t.Fatal(book.Title)
+	}
+	before := book.UpdatedAt
+	os.WriteFile(filepath.Join(dir, "metadata.abs"), []byte(";ABMETADATA2\nmedia=book\n[CHAPTER]\nstart=NaN\nend=4\ntitle=invalid"), 0600)
+	if _, err = c.Scan(ctx, 2, id, library.ScanOptions{ImportMetadata: true}); !errors.Is(err, library.ErrInvalid) {
+		t.Fatal("invalid chapter accepted", err)
+	}
+	book, _ = c.Item(ctx, 2, book.ID)
+	if book.UpdatedAt != before {
+		t.Fatal("malformed sidecar partially committed")
+	}
+}

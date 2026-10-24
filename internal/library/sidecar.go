@@ -80,7 +80,7 @@ func (c *Catalog) readSidecars(ctx context.Context, files []*scannedFile) (*Edit
 			continue
 		}
 		name := strings.ToLower(f.Name)
-		if name != "metadata.json" && name != "desc.txt" && name != "reader.txt" {
+		if name != "metadata.json" && name != "metadata.abs" && name != "desc.txt" && name != "reader.txt" {
 			continue
 		}
 		if err := ctx.Err(); err != nil {
@@ -132,6 +132,16 @@ func (c *Catalog) readSidecars(ctx context.Context, files []*scannedFile) (*Edit
 	if b, ok := contents["reader.txt"]; ok {
 		out.Metadata["narrators"] = []any{strings.TrimSpace(string(b))}
 	}
+	if b, ok := contents["metadata.abs"]; ok {
+		v, err := parseABSidecar(b)
+		if err != nil {
+			return nil, err
+		}
+		for k, val := range v.Metadata {
+			out.Metadata[k] = val
+		}
+		out.Chapters = v.Chapters
+	}
 	if b, ok := contents["metadata.json"]; ok {
 		v, err := parseSidecar(b)
 		if err != nil {
@@ -140,7 +150,9 @@ func (c *Catalog) readSidecars(ctx context.Context, files []*scannedFile) (*Edit
 		for k, val := range v.Metadata {
 			out.Metadata[k] = val
 		}
-		out.Chapters = v.Chapters
+		if v.Chapters != nil {
+			out.Chapters = v.Chapters
+		}
 	}
 	return &out, nil
 }

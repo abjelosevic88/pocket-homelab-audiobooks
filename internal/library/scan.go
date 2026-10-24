@@ -130,7 +130,7 @@ func (c *Catalog) scanFolders(ctx context.Context, lib string) ([]scanFolder, er
 }
 func scanRole(name string) string {
 	switch strings.ToLower(filepath.Base(name)) {
-	case "metadata.json", "desc.txt", "reader.txt":
+	case "metadata.json", "metadata.abs", "desc.txt", "reader.txt":
 		return "supplement"
 	}
 	ext := strings.ToLower(filepath.Ext(name))

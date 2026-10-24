@@ -1,4 +1,6 @@
 // The library: books (sorted, filtered, loading more as you scroll), series and authors, one library at a time.
+import {BulkBookEditor} from '../components/BulkBookEditor'
+import {useApp} from '../lib/app-context'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { NavLink, useSearchParams } from 'react-router-dom'
 import { api, ApiError } from '../lib/api'
@@ -98,6 +100,9 @@ function usePaged<T>(url: (page: number) => string, key: string) {
 }
 
 function Books({ lib }: { lib: string }) {
+  const {settings}=useApp()
+  const [selecting,setSelecting]=useState(false),[selected,setSelected]=useState<string[]>([]),[editing,setEditing]=useState(false),[revision,setRevision]=useState(0)
+
   const [sp, setSp] = useSearchParams()
   const sort = sp.get('sort') || 'added'
   const show = sp.get('show') || 'all'
@@ -105,7 +110,8 @@ function Books({ lib }: { lib: string }) {
   const narrator = sp.get('narrator') || ''
   const set = (k: string, v: string) => { const n = new URLSearchParams(sp); if (v && v !== 'all') n.set(k, v); else n.delete(k); setSp(n, { replace: true }) }
   const desc = sort === 'added' || sort === 'progress' || sort === 'year'
-  const key = `${lib}|${sort}|${show}|${genre}|${narrator}`
+  const key = `${lib}|${sort}|${show}|${genre}|${narrator}|${revision}`
+  useEffect(()=>{setSelected([])},[key])
   const { items, total, err, busy, more } = usePaged<Book>(page => {
     const p = new URLSearchParams({ library: lib, sort, page: String(page), limit: '60' })
     if (desc) p.set('desc', '1')
@@ -120,14 +126,17 @@ function Books({ lib }: { lib: string }) {
       <div className="toolbar row wrap">
         <Segmented size="sm" value={show} onChange={v => set('show', v)} options={[{ value: 'all', label: 'All' }, { value: 'in-progress', label: 'In progress' }, { value: 'not-started', label: 'Not started' }, { value: 'finished', label: 'Finished' }]} label="Show" />
         {(genre || narrator) && <button type="button" className="chip on" onClick={() => { set('genre', ''); set('narrator', '') }}>{genre ? `Genre: ${genre}` : `Read by ${narrator}`}<Icon name="x" size={12} /></button>}
+        {settings?.backend==='native'&&<button className="btn" onClick={()=>{setSelecting(!selecting);setSelected([])}}>{selecting?'Cancel selection':'Select books'}</button>}
+        {selecting&&<><button className="btn" onClick={()=>setSelected(items.slice(0,100).map(b=>b.id))}>Select visible books</button><button className="btn primary" disabled={!selected.length} onClick={()=>setEditing(true)}>Edit selected ({selected.length})</button></>}
         <span className="spacer" />
         <span className="muted small">{total >= 0 ? `${total.toLocaleString()} ${total === 1 ? 'book' : 'books'}` : ''}</span>
         <Select ariaLabel="Sort" value={sort} onChange={v => set('sort', v)} options={SORTS} />
       </div>
       {err && <div className="callout danger"><Icon name="alert" size={15} />{err.msg}</div>}
       {total === 0 ? <Empty title="No books here" icon="book">{show !== 'all' ? 'Nothing matches this filter.' : 'This library is empty.'}</Empty> : (
-        <div className="grid-covers">{items.map(b => <BookCard key={b.id} b={b} />)}</div>
+        <div className="grid-covers">{items.map(b => selecting?<div key={b.id}><label><input type="checkbox" aria-label={`Select ${b.title}`} disabled={selected.length>=100&&!selected.includes(b.id)} checked={selected.includes(b.id)} onChange={e=>setSelected(v=>e.target.checked?[...v,b.id]:v.filter(id=>id!==b.id))}/> Select</label><BookCard b={b}/></div>:<BookCard key={b.id} b={b} />)}</div>
       )}
+      {editing&&<BulkBookEditor ids={selected} onClose={()=>setEditing(false)} onSaved={()=>{setEditing(false);setSelecting(false);setRevision(n=>n+1)}}/>}
       <div ref={more} className="more-sentinel">{busy && <Loading label="" />}</div>
     </>
   )

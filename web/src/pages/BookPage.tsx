@@ -73,6 +73,7 @@ export default function BookPage() {
     ...(t > 0 || b.finished ? [{ label: 'Start over', icon: 'rotate-ccw', onSelect: () => setConfirm('reset') }] : []),
     ...(data.backend === 'native' ? [{ label: 'Add to a list', icon: 'layers', onSelect: () => setOrganizing(true) }] : []),
     ...(data.can_download ? [{ label: 'Download book', icon: 'download', onSelect: () => { window.location.href = `${V1}/catalog/items/${encodeURIComponent(b.id)}/download` } }] : []),
+    ...(data.backend==='native' && data.can_download ? [{label:'Export metadata',icon:'download',onSelect:()=>{window.location.href=`${V1}/catalog/items/${encodeURIComponent(b.id)}/metadata`}}] : []),
     ...(data.can_share ? [{ label: 'Share & RSS', icon: 'external', onSelect: () => setSharing(true) }] : []),
     ...(data.can_delete ? [{ label: 'Move to trash', icon: 'trash', onSelect: () => setTrashing(true) }] : []),
     ...(data.can_edit ? [{ label: 'Edit book', icon: 'edit', onSelect: () => setEditing(true) }] : []),

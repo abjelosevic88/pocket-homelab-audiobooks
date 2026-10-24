@@ -145,6 +145,10 @@ func (s *Server) nativeAPI(w http.ResponseWriter, r *http.Request, uid int64) {
 		s.nativeLibraryAPI(w, r, uid, parts[2], parts[3:])
 		return
 	}
+	if path == "/api/items/batch/update" && method == "POST" {
+		s.nativeBulkCompat(w, r, uid)
+		return
+	}
 	if path == "/api/items/batch/delete" && method == "POST" {
 		var in struct {
 			IDs []string `json:"libraryItemIds"`

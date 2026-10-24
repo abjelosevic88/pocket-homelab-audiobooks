@@ -27,9 +27,9 @@ scripts, not by the application at runtime.
    scans, configurable polling for changes, persistent/cancellable scan jobs,
    validated uploads, folder creation, metadata/chapter/cover editing and author/
    series associations are implemented. Same-root folder moves retain IDs.
-   JSON/description/narrator sidecars are read for new books, and explicit sidecar
+   JSON/legacy metadata.abs/description/narrator sidecars are read for new books, and explicit sidecar
    imports preserve ordinary manual edits. Scans reject concurrent edits. Provider
-   matching, legacy metadata.abs, cross-root moves and bulk tooling remain. Recoverable deletion is implemented.
+   matching and cross-root moves remain. Atomic bulk metadata editing is implemented. Recoverable deletion is implemented.
 4. **Remaining feature parity.** Collection and personal playlist CRUD, ordering,
    imported associations and streamed original-file ZIP downloads are implemented.
    Further work includes transcoding and tools,
@@ -105,8 +105,8 @@ as a standalone implementation.
 | --- | --- | --- |
 | Libraries | Multiple libraries/folders; ordering; book and podcast media; access restrictions | Imported browse/access, multiple folders, renaming, ordering, empty-library media type changes and reversible archival implemented; browser and permission tests verify archival/restoration |
 | Scanning | Incremental scan, watcher, manual/rescan, missing files, regrouping, file moves | Incremental/manual scans, polling, missing records and same-root moves verified; regrouping/cross-root moves pending |
-| Book ingestion | Single/multiple audio files, ebooks, tags, sidecars, chapters, covers, track order | Audio tags, natural ordering, embedded chapters, covers and JSON/text sidecars verified; legacy metadata.abs and multi-disc grouping pending |
-| Library management | Uploads, metadata/chapter editing, bulk operations, download, safe deletion | Validated uploads, metadata/chapters/covers and single-file and streamed book ZIP downloads implemented; recoverable deletion/restore/purge implemented; bulk editing tools pending |
+| Book ingestion | Single/multiple audio files, ebooks, tags, sidecars, chapters, covers, track order | Audio tags, natural ordering, embedded chapters, covers and JSON/text sidecars verified; legacy metadata.abs import implemented; multi-disc grouping pending |
+| Library management | Uploads, metadata/chapter editing, bulk operations, download, safe deletion | Validated uploads, metadata/chapters/covers and single-file and streamed book ZIP downloads implemented; recoverable deletion/restore/purge, portable metadata exports and atomic bulk metadata editing implemented |
 | Metadata | Built-in/custom providers, matching, covers, authors, series, genres, tags, narrators | Open Library, Google Books and custom provider search/preview, detail lookup and cover fetching implemented; Open Library live contract and browser selection verified. Other built-in providers and automated matching pending |
 | Browse | Search, filters, sorts, pagination, shelves, series and authors | Pending |
 | Playback | Direct/range streaming, multi-file timeline, transcoding/HLS, seeking | Direct/multi-file playback and local seekable FFmpeg/HLS verified |
@@ -341,3 +341,24 @@ permissions are required; archival also requires delete permission.
 Client library creation, patch, atomic ordering, scan and delete routes use these
 native operations. Client library deletion archives rather than erasing media.
 Shared-file protection includes alternate catalog roots pointing at the same file.
+
+## Bulk editing and portable metadata
+
+The native library view selects up to 100 books for a single atomic edit, with
+append-or-replace lists for authors, series, narrators, genres and tags. Scalar
+fields replace only explicitly selected values. Every book carries its observed
+revision; one stale/inaccessible item or invalid field rolls back all book and
+new author/series changes. Client batch-update requests use the same transaction.
+
+Legacy `metadata.abs` ABMETADATA v1/v2 sidecars now feed the same validator as JSON:
+key/value fields, comma-separated names, JSON tags, Y/N flags, description blocks
+and chapter timings. JSON takes precedence when both formats exist. Ordinary scans
+preserve existing edits; explicit sidecar import opts into applying these files.
+The legacy wire grammar is documented by the [original format writer](https://raw.githubusercontent.com/advplyr/audiobookshelf/v2.2.23/server/utils/generators/abmetadataGenerator.js);
+the parser here is independently implemented in Go. Malformed supported values
+abort a scan rather than leave partially updated books.
+
+Book More → Export metadata downloads portable `metadata.json` including names,
+series sequences, tags and chapters. Export requires download permission and does
+not overwrite an existing sidecar or modify media files. Writing sidecars back to
+the library is still separate work.
