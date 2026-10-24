@@ -133,7 +133,22 @@ func (s *Server) nativeAPI(w http.ResponseWriter, r *http.Request, uid int64) {
 		s.nativeLibraryAPI(w, r, uid, parts[2], parts[3:])
 		return
 	}
+	if path == "/api/items/batch/delete" && method == "POST" {
+		var in struct {
+			IDs []string `json:"libraryItemIds"`
+		}
+		if decode(r, &in) != nil {
+			writeErr(w, 400, "invalid item list")
+			return
+		}
+		s.nativeDeleteCompat(w, r, uid, in.IDs)
+		return
+	}
 	if len(parts) >= 3 && parts[0] == "api" && parts[1] == "items" {
+		if len(parts) == 3 && method == "DELETE" {
+			s.nativeDeleteCompat(w, r, uid, []string{parts[2]})
+			return
+		}
 		id := parts[2]
 		if len(parts) == 3 && read {
 			it, err := s.nativeItem(ctx, uid, id)

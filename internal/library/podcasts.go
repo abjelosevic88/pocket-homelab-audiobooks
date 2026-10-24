@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -187,6 +188,11 @@ func (c *Catalog) SetPodcastSettings(ctx context.Context, uid int64, id string, 
 	if err := c.CanManagePodcast(ctx, uid, id); err != nil {
 		return err
 	}
+	if in.Keep > 0 {
+		if _, err := c.trashPermission(ctx, uid, id); err != nil {
+			return err
+		}
+	}
 	if in.Interval < 300 || in.Interval > 604800 || in.Keep < 0 || in.Keep > 10000 || in.MaxNew < 1 || in.MaxNew > 100 {
 		return ErrInvalid
 	}
@@ -205,6 +211,7 @@ func (c *Catalog) SetPodcastSettings(ctx context.Context, uid int64, id string, 
 type PodcastEpisode struct {
 	feed.Episode
 	Downloaded bool   `json:"downloaded"`
+	InTrash    bool   `json:"in_trash"`
 	JobID      string `json:"job_id,omitempty"`
 	Status     string `json:"status,omitempty"`
 	Error      string `json:"error,omitempty"`
@@ -262,7 +269,13 @@ func (c *Catalog) PodcastEpisodes(ctx context.Context, uid int64, id string) ([]
 	}
 	for i := range out {
 		if old := downloaded[out[i].ID]; old != nil {
-			file, _, e := c.OpenFile(ctx, uid, id, str(object(old["audioFile"])["ino"]), false)
+			fid := str(object(old["audioFile"])["ino"])
+			var hidden int
+			if err = c.DB.QueryRowContext(ctx, `SELECT count(*) FROM catalog_removed_files WHERE item_id=? AND file_id=?`, id, fid).Scan(&hidden); err != nil {
+				return nil, err
+			}
+			out[i].InTrash = hidden > 0
+			file, _, e := c.OpenFile(ctx, uid, id, fid, false)
 			out[i].Downloaded = e == nil
 			if e == nil {
 				file.Close()
@@ -278,6 +291,12 @@ func (c *Catalog) PodcastEpisodes(ctx context.Context, uid int64, id string) ([]
 			return nil, err
 		}
 	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].PublishedAt == out[j].PublishedAt {
+			return out[i].ID < out[j].ID
+		}
+		return out[i].PublishedAt > out[j].PublishedAt
+	})
 	return out, nil
 }
 func (c *Catalog) QueueEpisode(ctx context.Context, uid int64, id, episode string) (string, error) {
@@ -497,5 +516,54 @@ func (c *Catalog) PublishEpisode(ctx context.Context, uid int64, id, episode, sp
 		return err
 	}
 	committed = true
+	return nil
+}
+
+// RetainPodcast moves older downloads into recoverable trash. Playback in any
+// account protects an episode. Only an explicit purge permanently removes bytes.
+func (c *Catalog) RetainPodcast(ctx context.Context, id string) error {
+	var uid int64
+	var keep int
+	err := c.DB.QueryRowContext(ctx, `SELECT actor_id,keep_latest FROM catalog_podcast_subscriptions WHERE item_id=? AND keep_latest>0 AND actor_id IS NOT NULL`, id).Scan(&uid, &keep)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if err = c.CanManagePodcast(ctx, uid, id); err != nil {
+		return err
+	}
+	if _, err = c.trashPermission(ctx, uid, id); err != nil {
+		return err
+	}
+	eps, err := c.PodcastEpisodes(ctx, uid, id)
+	if err != nil {
+		return err
+	}
+	count := 0
+	for _, ep := range eps {
+		if !ep.Downloaded {
+			continue
+		}
+		count++
+		if count <= keep {
+			continue
+		}
+		var playing int
+		if err = c.DB.QueryRowContext(ctx, `SELECT count(*) FROM catalog_play_sessions WHERE item_id=? AND episode_id=? AND closed=0 AND playing=1 AND updated_at>?`, id, ep.ID, time.Now().Add(-2*time.Minute).UnixMilli()).Scan(&playing); err != nil {
+			return err
+		}
+		if playing > 0 {
+			continue
+		}
+		it, e := c.Item(ctx, uid, id)
+		if e != nil {
+			return e
+		}
+		if _, e = c.Trash(ctx, uid, id, ep.ID, true, it.UpdatedAt); e != nil {
+			return e
+		}
+	}
 	return nil
 }

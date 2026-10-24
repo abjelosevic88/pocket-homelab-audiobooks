@@ -382,8 +382,8 @@ func (s *Server) handleBook(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"book": b, "bookmarks": marks, "series": nz(series), "up_next": inUp, "progress_id": p.ID, "started_at": p.StartedAt,
-		"listened":  map[string]any{"seconds": secs, "sessions": len(ls), "first": first},
-		"can_share": s.cfg.Backend == "native" && u.Role == "admin" && canDownload, "can_read": canRead, "open_url": openURL, "can_edit": canEdit, "can_download": canDownload, "backend": s.cfg.Backend,
+		"listened":   map[string]any{"seconds": secs, "sessions": len(ls), "first": first},
+		"can_delete": s.cfg.Backend == "native" && s.catalog().CanDelete(r.Context(), u.ID, id) == nil, "can_share": s.cfg.Backend == "native" && u.Role == "admin" && canDownload, "can_read": canRead, "open_url": openURL, "can_edit": canEdit, "can_download": canDownload, "backend": s.cfg.Backend,
 	})
 }
 

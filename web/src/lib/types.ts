@@ -15,7 +15,7 @@ export interface Book {
 }
 export interface Bookmark { libraryItemId: string; title: string; time: number; createdAt: number }
 export interface BookPage {
- can_share?: boolean; can_read?: boolean; can_edit?: boolean; can_download?: boolean; backend?: string
+ can_delete?: boolean; can_share?: boolean; can_read?: boolean; can_edit?: boolean; can_download?: boolean; backend?: string
   book: Book; bookmarks: Bookmark[]; series: { id: string; name: string; sequence: string; books: Book[] }[]; up_next: boolean; progress_id?: string; started_at?: number
   listened: { seconds: number; sessions: number; first: string }; open_url: string
 }

@@ -2,8 +2,11 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"github.com/abjelosevic88/pocket-homelab-audiobooks/internal/feed"
 	"github.com/abjelosevic88/pocket-homelab-audiobooks/internal/fetch"
+	"github.com/abjelosevic88/pocket-homelab-audiobooks/internal/library"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -155,6 +158,71 @@ func TestNativePodcastSubscribeCheckDownloadAndPlayback(t *testing.T) {
 	book, err := s.nativeEpisodeBook(context.Background(), a.u.ID, id, episode)
 	if err != nil || book.CurrentTime != 1 || book.EpisodeID != episode {
 		t.Fatalf("repair lost progress %+v %v", book, err)
+	}
+
+	// Retention protects active listeners, then moves only the older download.
+	ctx := context.Background()
+	config := library.PodcastSettings{Keep: 1, Interval: 3600, MaxNew: 3}
+	if err = s.catalog().SetPodcastSettings(ctx, a.u.ID, id, config); !errors.Is(err, library.ErrNotFound) {
+		t.Fatal("retention requires deletion permission", err)
+	}
+	if _, err = s.store.DB.Exec(`UPDATE catalog_accounts SET permissions=json_set(permissions,'$.delete',json('true')) WHERE id='alice'`); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.catalog().UpdateFeed(ctx, a.u.ID, id, feed.Feed{Episodes: []feed.Episode{{ID: "two", Title: "Episode two", URL: upstream.URL + "/episode2.mp3", PublishedAt: time.Now().Add(time.Hour).UnixMilli()}}}); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.catalog().PublishEpisode(ctx, a.u.ID, id, "two", source, ffprobe); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.catalog().SetPodcastSettings(ctx, a.u.ID, id, config); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.store.DB.Exec(`UPDATE catalog_play_sessions SET playing=1,closed=0,updated_at=? WHERE id=?`, time.Now().UnixMilli(), sid); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.catalog().RetainPodcast(ctx, id); err != nil {
+		t.Fatal(err)
+	}
+	entries, err := s.catalog().TrashList(ctx, a.u.ID)
+	if err != nil || len(entries) != 0 {
+		t.Fatal("active episode removed", entries, err)
+	}
+	if _, err = s.store.DB.Exec(`UPDATE catalog_play_sessions SET playing=0 WHERE id=?`, sid); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.catalog().RetainPodcast(ctx, id); err != nil {
+		t.Fatal(err)
+	}
+	entries, err = s.catalog().TrashList(ctx, a.u.ID)
+	if err != nil || len(entries) != 1 || entries[0].EpisodeID != episode {
+		t.Fatal("retention", entries, err)
+	}
+	episodes, err := s.catalog().PodcastEpisodes(ctx, a.u.ID, id)
+	if err != nil || len(episodes) != 2 || !episodes[1].InTrash || episodes[1].Downloaded {
+		t.Fatal("trash visibility", episodes, err)
+	}
+	if _, err = s.catalog().TrashAction(ctx, a.u.ID, entries[0].ID, "restore"); err != nil {
+		t.Fatal(err)
+	}
+	config.Keep = 0
+	if err = s.catalog().SetPodcastSettings(ctx, a.u.ID, id, config); err != nil {
+		t.Fatal(err)
+	}
+	it, _ := s.catalog().Item(ctx, a.u.ID, id)
+	trashed, err := s.catalog().Trash(ctx, a.u.ID, id, episode, true, it.UpdatedAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = s.catalog().PublishEpisode(ctx, a.u.ID, id, episode, source, ffprobe); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.catalog().TrashAction(ctx, a.u.ID, trashed.ID, "restore"); !errors.Is(err, library.ErrConflict) {
+		t.Fatal("restore replaced newer download", err)
+	}
+	book, err = s.nativeEpisodeBook(ctx, a.u.ID, id, episode)
+	if err != nil || book.CurrentTime != 1 {
+		t.Fatal("redownload lost history", book, err)
 	}
 	if w = call(t, h, a, "GET", "/api/v1/podcasts/opml", ""); w.Code != 200 {
 		t.Fatal("OPML export", w.Code)

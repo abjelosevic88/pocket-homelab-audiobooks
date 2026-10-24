@@ -1,9 +1,10 @@
 // One book: cover, what it is, your place in it, chapters, bookmarks, the rest of its series.
 import { useEffect, useState } from 'react'
+import {TrashDialog} from '../components/TrashDialog'
 import { ShareDialog } from '../components/ShareDialog'
 import { AddToList } from '../components/AddToList'
 import { BookEditor } from '../components/BookEditor'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useParams, useNavigate } from 'react-router-dom'
 import { api, V1 } from '../lib/api'
 import { useApp } from '../lib/app-context'
 import { usePlayer } from '../lib/player'
@@ -24,6 +25,8 @@ export default function BookPage() {
   const { data, setData, error, notConnected, reload } = useApi<BookPageT>(`${V1}/books/${encodeURIComponent(id)}`)
   const [more, setMore] = useState(false)
   const [sharing,setSharing] = useState(false)
+  const [trashing,setTrashing]=useState(false)
+  const navigate=useNavigate()
   const [editing, setEditing] = useState(false)
   const [organizing, setOrganizing] = useState(false)
   const [confirm, setConfirm] = useState<'' | 'reset' | 'finished'>('')
@@ -71,11 +74,13 @@ export default function BookPage() {
     ...(data.backend === 'native' ? [{ label: 'Add to a list', icon: 'layers', onSelect: () => setOrganizing(true) }] : []),
     ...(data.can_download ? [{ label: 'Download book', icon: 'download', onSelect: () => { window.location.href = `${V1}/catalog/items/${encodeURIComponent(b.id)}/download` } }] : []),
     ...(data.can_share ? [{ label: 'Share & RSS', icon: 'external', onSelect: () => setSharing(true) }] : []),
+    ...(data.can_delete ? [{ label: 'Move to trash', icon: 'trash', onSelect: () => setTrashing(true) }] : []),
     ...(data.can_edit ? [{ label: 'Edit book', icon: 'edit', onSelect: () => setEditing(true) }] : []),
     ...(data.open_url ? [{ label: 'Open in Audiobookshelf', icon: 'external', onSelect: () => window.open(data.open_url, '_blank', 'noreferrer') }] : []),
   ]
   return (
     <div className="book-page">
+      {trashing&&<TrashDialog id={id} title={b.title} onClose={()=>setTrashing(false)} onRemoved={()=>{if(here)p.stop();navigate('/trash')}}/>}
       <div className="backdrop blur" style={b.cover ? { backgroundImage: `url(${cover(b.cover, 600)})` } : undefined}><div className="backdrop-shade" /></div>
       <section className="book-hero">
         <div className="book-cover"><Img src={b.cover} w={420} alt={b.title} /></div>

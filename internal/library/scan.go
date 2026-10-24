@@ -256,6 +256,24 @@ func (c *Catalog) Scan(ctx context.Context, uid int64, lib string, opt ScanOptio
 	if err != nil {
 		return report, err
 	}
+	removed := map[string]bool{}
+	rows, err = c.DB.QueryContext(ctx, `SELECT item_id FROM catalog_removed_items`)
+	if err != nil {
+		return report, err
+	}
+	for rows.Next() {
+		var id string
+		if err = rows.Scan(&id); err != nil {
+			rows.Close()
+			return report, err
+		}
+		removed[id] = true
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return report, err
+	}
 	seen := map[string]bool{}
 	newGroups := map[string]*scanBook{}
 	for _, folder := range folders {
@@ -291,6 +309,20 @@ func (c *Catalog) Scan(ctx context.Context, uid int64, lib string, opt ScanOptio
 				}
 				path = filepath.FromSlash(path)
 				key := folder.Root.id + "/" + path
+				sourcePath := filepath.Join(folder.Root.source, path)
+				longest, owner := -1, ""
+				for id, book := range books {
+					if book.Path != "" && under(sourcePath, book.Path) && len(book.Path) > longest {
+						longest, owner = len(book.Path), id
+					}
+				}
+				if removed[owner] {
+					return nil
+				}
+				if old := oldByPath[key]; old != nil && removed[old.OldItem] {
+					return nil
+				}
+
 				if seen[key] {
 					return nil
 				}
@@ -309,6 +341,9 @@ func (c *Catalog) Scan(ctx context.Context, uid int64, lib string, opt ScanOptio
 							old = prev
 						}
 					}
+				}
+				if old != nil && removed[old.OldItem] {
+					return nil
 				}
 				f := &scannedFile{ID: scanStableID(folder.Root.id, path), RootID: folder.Root.id, Relative: path, Source: filepath.Join(folder.Root.source, path), Name: entry.Name(), Role: role, MIME: mimeFor(path), Size: info.Size(), Modified: info.ModTime().UnixNano(), Identity: fileIdentity(info), Doc: sourceRow{}}
 				unchanged := false
@@ -413,6 +448,9 @@ func (c *Catalog) Scan(ctx context.Context, uid int64, lib string, opt ScanOptio
 	}
 	defer tx.Rollback()
 	for _, book := range books {
+		if removed[book.Item.ID] {
+			continue
+		}
 		if err = ctx.Err(); err != nil {
 			return report, err
 		}

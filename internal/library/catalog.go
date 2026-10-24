@@ -122,7 +122,7 @@ func (c *Catalog) Item(ctx context.Context, userID int64, id string) (Item, erro
 	if err != nil {
 		return Item{}, err
 	}
-	it, err := scanItem(c.DB.QueryRowContext(ctx, `SELECT `+itemColumns+` FROM catalog_items WHERE id=?`, id))
+	it, err := scanItem(c.DB.QueryRowContext(ctx, `SELECT `+itemColumns+` FROM catalog_items WHERE id=? AND NOT EXISTS(SELECT 1 FROM catalog_removed_items x WHERE x.item_id=catalog_items.id)`, id))
 	if errors.Is(err, sql.ErrNoRows) {
 		return Item{}, ErrNotFound
 	}
@@ -166,7 +166,7 @@ func (c *Catalog) Items(ctx context.Context, userID int64, q Query) (Page, error
 	}
 	// User text is a literal substring, not a SQL LIKE expression. Filtering and
 	// counting both happen after permissions, including explicit/tag restrictions.
-	rows, err := c.DB.QueryContext(ctx, `SELECT `+strings.TrimSuffix(itemColumns, ",document")+`,'' AS document FROM catalog_items WHERE (?='' OR library_id=?) AND (?='' OR media_type=?) ORDER BY title COLLATE NOCASE,id`, q.LibraryID, q.LibraryID, q.MediaType, q.MediaType)
+	rows, err := c.DB.QueryContext(ctx, `SELECT `+strings.TrimSuffix(itemColumns, ",document")+`,'' AS document FROM catalog_items WHERE NOT EXISTS(SELECT 1 FROM catalog_removed_items x WHERE x.item_id=catalog_items.id) AND (?='' OR library_id=?) AND (?='' OR media_type=?) ORDER BY title COLLATE NOCASE,id`, q.LibraryID, q.LibraryID, q.MediaType, q.MediaType)
 	if err != nil {
 		return out, err
 	}
@@ -238,7 +238,7 @@ func (c *Catalog) Files(ctx context.Context, userID int64, itemID string) ([]Fil
 	if _, err := c.Item(ctx, userID, itemID); err != nil {
 		return nil, err
 	}
-	rows, err := c.DB.QueryContext(ctx, `SELECT id,role,name,mime,size,duration,track_index,excluded FROM catalog_files WHERE item_id=? ORDER BY track_index,id`, itemID)
+	rows, err := c.DB.QueryContext(ctx, `SELECT id,role,name,mime,size,duration,track_index,excluded FROM catalog_files WHERE item_id=? AND NOT EXISTS(SELECT 1 FROM catalog_removed_files x WHERE x.item_id=catalog_files.item_id AND x.file_id=catalog_files.id) ORDER BY track_index,id`, itemID)
 	if err != nil {
 		return nil, err
 	}
@@ -262,7 +262,7 @@ func (c *Catalog) OpenFile(ctx context.Context, userID int64, itemID, fileID str
 		return nil, f, err
 	}
 	var root, relative string
-	err := c.DB.QueryRowContext(ctx, `SELECT f.id,f.role,f.name,f.mime,f.size,f.duration,f.track_index,f.excluded,r.local_path,f.relative_path FROM catalog_files f JOIN catalog_roots r ON r.id=f.root_id WHERE f.item_id=? AND f.id=?`, itemID, fileID).Scan(&f.ID, &f.Role, &f.Name, &f.MIME, &f.Size, &f.Duration, &f.Index, &f.Excluded, &root, &relative)
+	err := c.DB.QueryRowContext(ctx, `SELECT f.id,f.role,f.name,f.mime,f.size,f.duration,f.track_index,f.excluded,r.local_path,f.relative_path FROM catalog_files f JOIN catalog_roots r ON r.id=f.root_id WHERE f.item_id=? AND f.id=? AND NOT EXISTS(SELECT 1 FROM catalog_removed_files x WHERE x.item_id=f.item_id AND x.file_id=f.id)`, itemID, fileID).Scan(&f.ID, &f.Role, &f.Name, &f.MIME, &f.Size, &f.Duration, &f.Index, &f.Excluded, &root, &relative)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, f, ErrNotFound
 	}
@@ -303,7 +303,7 @@ func (c *Catalog) Progress(ctx context.Context, userID int64) ([]json.RawMessage
 	if err != nil {
 		return nil, err
 	}
-	rows, err := c.DB.QueryContext(ctx, `SELECT p.document,i.library_id,i.explicit,i.tags FROM catalog_progress p JOIN catalog_items i ON i.id=p.item_id WHERE p.account_id=? ORDER BY p.updated_at DESC,p.id`, a.ID)
+	rows, err := c.DB.QueryContext(ctx, `SELECT p.document,i.library_id,i.explicit,i.tags FROM catalog_progress p JOIN catalog_items i ON i.id=p.item_id WHERE p.account_id=? AND NOT EXISTS(SELECT 1 FROM catalog_removed_items x WHERE x.item_id=i.id) ORDER BY p.updated_at DESC,p.id`, a.ID)
 	if err != nil {
 		return nil, err
 	}

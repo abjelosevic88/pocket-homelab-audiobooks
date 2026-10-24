@@ -190,7 +190,7 @@ func (s *Server) nativePodcasts(w http.ResponseWriter, r *http.Request) {
 		var checked int64
 		var lastError string
 		_ = s.store.DB.QueryRowContext(ctx, `SELECT auto_download,interval_seconds,keep_latest,max_new,last_check,error FROM catalog_podcast_subscriptions WHERE item_id=?`, id).Scan(&config.Auto, &config.Interval, &config.Keep, &config.MaxNew, &checked, &lastError)
-		writeJSON(w, 200, nativeObject{"item": it, "episodes": eps, "settings": config, "last_check": checked, "error": lastError, "can_manage": c.CanManagePodcast(ctx, uid, id) == nil})
+		writeJSON(w, 200, nativeObject{"item": it, "episodes": eps, "settings": config, "last_check": checked, "error": lastError, "can_manage": c.CanManagePodcast(ctx, uid, id) == nil, "can_delete": c.CanDelete(ctx, uid, id) == nil})
 		return
 	}
 	if len(tail) == 2 && tail[1] == "check" && r.Method == "POST" {
@@ -207,11 +207,11 @@ func (s *Server) nativePodcasts(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, 400, "invalid podcast settings")
 			return
 		}
-		if in.Keep != 0 {
-			writeErr(w, 400, "episode retention is not enabled yet")
+		if err = c.SetPodcastSettings(ctx, uid, id, in); err != nil {
+			s.nativeError(w, err)
 			return
 		}
-		if err = c.SetPodcastSettings(ctx, uid, id, in); err != nil {
+		if err = c.RetainPodcast(ctx, id); err != nil {
 			s.nativeError(w, err)
 			return
 		}
@@ -256,7 +256,7 @@ func (s *Server) nativePodcastLoop(ctx context.Context) {
 		var id string
 		var uid, last int64
 		var maxNew int
-		err := s.store.DB.QueryRowContext(ctx, `SELECT item_id,actor_id,last_check,max_new FROM catalog_podcast_subscriptions WHERE auto_download=1 AND actor_id IS NOT NULL AND last_check+interval_seconds*1000<=? ORDER BY last_check LIMIT 1`, time.Now().UnixMilli()).Scan(&id, &uid, &last, &maxNew)
+		err := s.store.DB.QueryRowContext(ctx, `SELECT item_id,actor_id,last_check,max_new FROM catalog_podcast_subscriptions WHERE auto_download=1 AND actor_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM catalog_removed_items r WHERE r.item_id=catalog_podcast_subscriptions.item_id) AND last_check+interval_seconds*1000<=? ORDER BY last_check LIMIT 1`, time.Now().UnixMilli()).Scan(&id, &uid, &last, &maxNew)
 		if err != nil {
 			continue
 		}
@@ -269,9 +269,12 @@ func (s *Server) nativePodcastLoop(ctx context.Context) {
 		if err != nil {
 			continue
 		}
+		if e := s.catalog().RetainPodcast(ctx, id); e != nil {
+			s.log.Warn("podcast retention", "error", e)
+		}
 		added := 0
 		for _, ep := range episodes {
-			if ep.Downloaded || ep.PublishedAt <= last || added >= maxNew {
+			if ep.Downloaded || ep.InTrash || ep.PublishedAt <= last || added >= maxNew {
 				continue
 			}
 			if _, err = s.catalog().QueueEpisode(ctx, uid, id, ep.ID); err == nil {
@@ -317,6 +320,11 @@ func (s *Server) runPodcastJob(ctx context.Context) bool {
 	done, cancelDone := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancelDone()
 	_, _ = s.store.DB.ExecContext(done, `UPDATE catalog_podcast_jobs SET status=?,updated_at=?,error=? WHERE id=? AND status='running'`, state, time.Now().UnixMilli(), message, job)
+	if err == nil {
+		if e := s.catalog().RetainPodcast(done, item); e != nil {
+			s.log.Warn("podcast retention", "error", e)
+		}
+	}
 	return true
 }
 func (s *Server) downloadPodcastEpisode(ctx context.Context, uid int64, item, episode, job string) error {

@@ -130,6 +130,9 @@ func (s *Server) Bootstrap(ctx context.Context) error {
 		if _, err := s.store.DB.ExecContext(ctx, `UPDATE catalog_scan_runs SET status='failed',finished_at=?,report=json_set(report,'$.error','Interrupted by server restart') WHERE status='running'`, time.Now().UnixMilli()); err != nil {
 			return err
 		}
+		if err := s.catalog().RecoverTrash(ctx); err != nil {
+			s.log.Error("trash recovery requires attention", "error", err)
+		}
 		go s.nativeScanLoop(ctx)
 		_, _ = s.store.DB.ExecContext(ctx, `UPDATE catalog_podcast_jobs SET status='failed',error='Interrupted by server restart' WHERE status='running'`)
 		go s.nativePodcastLoop(ctx)

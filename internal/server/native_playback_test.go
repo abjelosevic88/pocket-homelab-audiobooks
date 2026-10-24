@@ -218,7 +218,7 @@ func TestNativeBrowserAcceptance(t *testing.T) {
 	if _, err = s.store.DB.Exec(`UPDATE users SET role='admin' WHERE id=?`, a.u.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = s.store.DB.Exec(`UPDATE catalog_accounts SET permissions=json_set(permissions,'$.upload',json('true'),'$.update',json('true')) WHERE pocket_user_id=?`, a.u.ID); err != nil {
+	if _, err = s.store.DB.Exec(`UPDATE catalog_accounts SET permissions=json_set(permissions,'$.upload',json('true'),'$.delete',json('true'),'$.update',json('true')) WHERE pocket_user_id=?`, a.u.ID); err != nil {
 		t.Fatal(err)
 	}
 	var root string
@@ -298,7 +298,7 @@ func TestNativeBrowserAcceptance(t *testing.T) {
 
 func TestNativeCollectionAndPlaylistClientRoutes(t *testing.T) {
 	s, h, a, _, tok := nativeHarness(t)
-	if _, err := s.store.DB.Exec(`UPDATE catalog_accounts SET permissions=json_set(permissions,'$.update',json('true')) WHERE pocket_user_id=?`, a.u.ID); err != nil {
+	if _, err := s.store.DB.Exec(`UPDATE catalog_accounts SET permissions=json_set(permissions,'$.delete',json('true'),'$.update',json('true')) WHERE pocket_user_id=?`, a.u.ID); err != nil {
 		t.Fatal(err)
 	}
 	collection := jsonObject(t, nativeCall(t, h, tok, "POST", "/api/collections", `{"libraryId":"lib","name":"Favorites","books":["book"]}`))

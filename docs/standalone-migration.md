@@ -29,7 +29,7 @@ scripts, not by the application at runtime.
    series associations are implemented. Same-root folder moves retain IDs.
    JSON/description/narrator sidecars are read for new books, and explicit sidecar
    imports preserve ordinary manual edits. Scans reject concurrent edits. Provider
-   matching, legacy metadata.abs, cross-root moves, deletion and bulk tooling remain.
+   matching, legacy metadata.abs, cross-root moves and bulk tooling remain. Recoverable deletion is implemented.
 4. **Remaining feature parity.** Collection and personal playlist CRUD, ordering,
    imported associations and streamed original-file ZIP downloads are implemented.
    Further work includes transcoding and tools,
@@ -81,7 +81,7 @@ protocol tests, not a claim of testing every third-party phone app.
 - Library, item, author, series, folder and file identifiers; order and sequence.
 - Original media, ebooks and companion files, tags, custom metadata, covers,
   author images, chapters, track order, durations and offsets.
-- All user accounts, account status, library/tag permissions, progress, finished
+- The retained root account (fika/raycast explicitly excluded), account status, library/tag permissions, progress, finished
   timestamps, bookmarks, preferences, history and device associations.
 - Collections, playlists, public feeds, media shares and their access controls.
 - Podcast subscriptions, downloaded episodes, download/retention settings and
@@ -106,7 +106,7 @@ as a standalone implementation.
 | Libraries | Multiple libraries/folders; ordering; book and podcast media; access restrictions | Imported browse/access verified; management pending |
 | Scanning | Incremental scan, watcher, manual/rescan, missing files, regrouping, file moves | Incremental/manual scans, polling, missing records and same-root moves verified; regrouping/cross-root moves pending |
 | Book ingestion | Single/multiple audio files, ebooks, tags, sidecars, chapters, covers, track order | Audio tags, natural ordering, embedded chapters, covers and JSON/text sidecars verified; legacy metadata.abs and multi-disc grouping pending |
-| Library management | Uploads, metadata/chapter editing, bulk operations, download, safe deletion | Validated uploads, metadata/chapters/covers and single-file and streamed book ZIP downloads implemented; bulk tools/deletion pending |
+| Library management | Uploads, metadata/chapter editing, bulk operations, download, safe deletion | Validated uploads, metadata/chapters/covers and single-file and streamed book ZIP downloads implemented; recoverable deletion/restore/purge implemented; bulk editing tools pending |
 | Metadata | Built-in/custom providers, matching, covers, authors, series, genres, tags, narrators | Open Library, Google Books and custom provider search/preview, detail lookup and cover fetching implemented; Open Library live contract and browser selection verified. Other built-in providers and automated matching pending |
 | Browse | Search, filters, sorts, pagination, shelves, series and authors | Pending |
 | Playback | Direct/range streaming, multi-file timeline, transcoding/HLS, seeking | Direct/multi-file playback and local seekable FFmpeg/HLS verified |
@@ -115,7 +115,7 @@ as a standalone implementation.
 | Clients | Native Pocket app API, third-party login, refresh, token streams, Socket.IO | Pending |
 | Organisation | Collections, personal playlists, bulk add/remove/reorder | Imported associations, CRUD, ordered batch changes and private ownership verified in API/store tests; create/edit verified in the browser |
 | Ebooks | Serving/reading contract, reading progress, companion books, sending to ereaders | EPUB/PDF web reading, chapter navigation, text size, EPUB CFI/PDF page resume, separate companion positions, optimistic conflict checks, durable browser saves and original-file client downloads implemented. Browser EPUB/PDF save/reload verified. Ereader delivery and remaining formats/tools pending |
-| Podcasts | Feeds/OPML, discovery, episode checks/downloads, scheduling and retention | RSS/Atom subscriptions, OPML import/export, checks, scheduled new-episode downloads, persistent/cancellable jobs, validation, missing-file repair and web/client playback implemented. Browser subscribe/download/play/save/reload verified. Discovery, retention, editing/deletion and full compatibility endpoints pending |
+| Podcasts | Feeds/OPML, discovery, episode checks/downloads, scheduling and retention | RSS/Atom subscriptions, OPML import/export, checks, scheduled new-episode downloads, persistent/cancellable jobs, validation, missing-file repair and web/client playback implemented. Browser subscribe/download/play/save/reload verified. Recoverable keep-latest retention and episode/show deletion implemented; discovery, episode editing and full compatibility endpoints pending |
 | Sharing | RSS for books/series/collections, media shares, passwords/expiry/download permissions | Native RSS and share pages for books, series, collections and podcast episodes; password grants, expiry/revocation, current publisher permissions, per-episode media boundaries, original downloads and HLS fallback implemented. Browser create/play/resume/RSS/revoke and protocol isolation tests pass; source snapshot has no published feeds |
 | Accounts | Local/SSO authentication, per-user isolation, permissions, API-key lifecycle | Admin mapping/grants, library/tag/explicit permissions, locking, stale-update rejection and account ownership verified; full migration pending |
 | Tools | Metadata embedding, M4B conversion, jobs, cancellation, status | Pending |
@@ -275,3 +275,31 @@ Add `POCKET_NATIVE_REHEARSAL_SCAN=1` to the snapshot rehearsal command to exerci
 scanning against a disposable database copy. Source media remains read-only.
 FFprobe must be on PATH. The native backend remains opt-in and has not been
 switched on in production. All pending rows in the feature matrix still apply.
+
+## Recoverable deletion and podcast retention
+
+Native deletion records a durable journal before moving indexed files beneath
+`.pocket-trash` in each media root. Rename operations never overwrite an existing
+file. Restore checks the original file identity and refuses conflicting new files;
+purge is a separate, confirmed irreversible operation. Personal progress/history
+rows survive deletion. Shared files referenced by another item are left in place.
+Catalog-only removal leaves all media at its original paths. Scans respect deleted
+item tombstones, including same-root moves, and ignore hidden trash directories.
+Keep media roots and their `.pocket-trash` folders with the database when backing up.
+
+The web book/podcast menus and Trash page expose removal, restore, retry and purge.
+Client `DELETE /api/items/:id?hard=1` also moves files to recoverable trash; omitting
+`hard=1` removes only the catalog entry. Batch deletion returns individual results.
+The native API requires an item revision, and permanent purge requires explicit
+confirmation. Delete access is checked against the current account and library.
+
+Podcast keep-latest settings apply to downloaded episodes, ordered by publication
+time. Older episodes move to trash; recent active sessions protect an episode.
+Retention runs after downloads, due feed checks and settings changes. A trashed
+episode is not automatically queued again. Manual redownload retains episode ID
+and progress; restoring its older trash entry cannot replace that newer copy.
+Trash consumes disk until purged, including episodes removed by retention.
+
+Synthetic tests verify permissions, stale revisions, partial-move recovery,
+restore collisions, changed-file refusal, purge, scanner tombstones, active-session
+retention protection and redownload identity. Real media is not used in deletion tests.
