@@ -27,6 +27,14 @@ func (s *Server) Router() http.Handler {
 	r.Use(s.logging)
 	r.Use(middleware.Recoverer)
 
+	r.Get("/share-player.js", s.nativeShareScript)
+	r.Get("/share/{slug}", s.nativePublicShare)
+	r.Head("/share/{slug}", s.nativePublicShare)
+	r.Get("/share/{slug}/*", s.nativePublicShare)
+	r.Head("/share/{slug}/*", s.nativePublicShare)
+	r.Get("/feed/{slug}", s.nativePublicShare)
+	r.Head("/feed/{slug}", s.nativePublicShare)
+
 	r.Get("/pocket-ask.js", s.core.AskWidget("audiobooks"))
 	r.Get("/healthz", s.handleHealth)
 	r.Get("/readyz", s.handleReady)
@@ -78,6 +86,10 @@ func (s *Server) Router() http.Handler {
 				r.Get("/dashboard", s.handleDashboard)
 				r.Get("/day/{date}", s.handleDay)
 
+				r.Get("/shares", s.nativeShares)
+				r.Post("/shares", s.nativeShares)
+				r.Put("/shares/{share}", s.nativeShares)
+				r.Delete("/shares/{share}", s.nativeShares)
 				r.HandleFunc("/organize/*", s.nativeOrganize)
 				r.HandleFunc("/podcasts/*", s.nativePodcasts)
 				r.Get("/podcasts", s.nativePodcasts)

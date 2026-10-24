@@ -1,5 +1,6 @@
 // One book: cover, what it is, your place in it, chapters, bookmarks, the rest of its series.
 import { useEffect, useState } from 'react'
+import { ShareDialog } from '../components/ShareDialog'
 import { AddToList } from '../components/AddToList'
 import { BookEditor } from '../components/BookEditor'
 import { Link, useParams } from 'react-router-dom'
@@ -22,6 +23,7 @@ export default function BookPage() {
   const p = usePlayer()
   const { data, setData, error, notConnected, reload } = useApi<BookPageT>(`${V1}/books/${encodeURIComponent(id)}`)
   const [more, setMore] = useState(false)
+  const [sharing,setSharing] = useState(false)
   const [editing, setEditing] = useState(false)
   const [organizing, setOrganizing] = useState(false)
   const [confirm, setConfirm] = useState<'' | 'reset' | 'finished'>('')
@@ -68,6 +70,7 @@ export default function BookPage() {
     ...(t > 0 || b.finished ? [{ label: 'Start over', icon: 'rotate-ccw', onSelect: () => setConfirm('reset') }] : []),
     ...(data.backend === 'native' ? [{ label: 'Add to a list', icon: 'layers', onSelect: () => setOrganizing(true) }] : []),
     ...(data.can_download ? [{ label: 'Download book', icon: 'download', onSelect: () => { window.location.href = `${V1}/catalog/items/${encodeURIComponent(b.id)}/download` } }] : []),
+    ...(data.can_share ? [{ label: 'Share & RSS', icon: 'external', onSelect: () => setSharing(true) }] : []),
     ...(data.can_edit ? [{ label: 'Edit book', icon: 'edit', onSelect: () => setEditing(true) }] : []),
     ...(data.open_url ? [{ label: 'Open in Audiobookshelf', icon: 'external', onSelect: () => window.open(data.open_url, '_blank', 'noreferrer') }] : []),
   ]
@@ -178,6 +181,7 @@ export default function BookPage() {
           </section>
         </aside>
       </div>
+      {sharing && <ShareDialog kind="item" target={id} name={b.title} onClose={()=>setSharing(false)} />}
       {organizing && <AddToList book={b.id} library={b.library_id} collections={!!data.can_edit} onClose={() => setOrganizing(false)} />}
       {editing && <BookEditor id={id} onClose={() => setEditing(false)} onSaved={() => { void reload() }} />}
       {confirm === 'reset' && <Confirm title="Start over?" message="Your place goes back to the beginning, everywhere (the Audiobookshelf apps too). Your history stays." confirmLabel="Start over" onCancel={() => setConfirm('')} onConfirm={() => { setConfirm(''); progress('reset') }} />}

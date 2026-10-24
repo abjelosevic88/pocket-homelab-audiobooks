@@ -284,6 +284,7 @@ func TestNativeBrowserAcceptance(t *testing.T) {
 		t.Fatal(err)
 	}
 	server := httptest.NewServer(s.Router())
+	s.cfg.BaseURL = server.URL
 	defer server.Close()
 	script := filepath.Join("..", "..", "scripts", "test-native-browser.mjs")
 	cmd := exec.Command("node", script)

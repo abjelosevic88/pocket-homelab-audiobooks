@@ -5,7 +5,7 @@ export default defineConfig({
   plugins: [react()],
   build: {
     outDir: 'dist', emptyOutDir: true, sourcemap: false, chunkSizeWarningLimit: 700,
-    rollupOptions: { output: { manualChunks: { react: ['react', 'react-dom', 'react-router-dom'] } } },
+    rollupOptions: { input: { index: 'index.html', 'share-player': 'src/share-player.ts' }, output: { entryFileNames: chunk => chunk.name==='share-player' ? 'share-player.js' : 'assets/[name]-[hash].js', manualChunks: { react: ['react', 'react-dom', 'react-router-dom'] } } },
   },
   server: {
     port: 5173,

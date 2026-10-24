@@ -217,3 +217,28 @@ bounded disk spooling and validates audio with FFprobe before publishing. Restar
 marks interrupted jobs failed for explicit retry. Imported episode IDs and saved
 positions survive missing-file repair. The global player accepts `episode_id` in
 `POST /api/v1/play/{id}` and restores an episode independently of other episodes.
+
+## Native sharing
+
+- `GET|POST /api/v1/shares`; `PUT|DELETE /api/v1/shares/{id}`: the administrator's
+  shares. Creation accepts `kind` (`item`, `series`, `collection`), `target_id`,
+  optional `episode_id`, `name`, optional `password`, `downloadable`, and
+  `expires_at` (Unix milliseconds, zero for no expiry). Updates require `revision`.
+  Omit `password` to retain it; an empty password removes protection.
+- `GET|HEAD /share/{slug}`: public player; `/feed/{slug}`: RSS; media paths beneath
+  the share revalidate its membership, password, expiry and publisher permissions.
+- Compatibility: `GET /api/feeds`, `POST /api/feeds/{item|series|collection}/{id}/open`,
+  `POST /api/feeds/{id}/close`, `POST /api/share/mediaitem`,
+  `DELETE /api/share/mediaitem/{id}`. Feed URLs use configured `BASE_URL`, not an
+  untrusted client-supplied host.
+
+## Native ebook reading
+
+- `GET /api/v1/catalog/items/{id}/reader?file={file_id}` returns permitted EPUB/PDF
+  files and the selected file's position/revision. Omit `file` for the primary.
+- `PUT` to that route saves `{user_id, location, progress, revision}`. Progress is
+  a fraction; EPUB locations are CFIs and PDF locations are page-number strings.
+  Stale positions return 409; identical retries succeed.
+- `GET|HEAD /api/v1/catalog/items/{id}/reader/{file_id}` serves a prepared EPUB or
+  original PDF for the browser reader. Original ebook downloads remain available
+  through the catalog/client file routes.

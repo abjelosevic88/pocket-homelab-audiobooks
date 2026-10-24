@@ -107,3 +107,27 @@ DRM-encrypted content requires an external reader. PDF.js renders PDF pages
 and selectable text in the browser. Neither reader starts a separate server or
 uses Audiobookshelf. Reader dependencies load only on the reader page; notices
 are at `/reader-licenses.txt`.
+
+### Native shares and RSS
+
+Administrators with download permission can create **Share & RSS** links from
+books, series, collections or downloaded podcast episodes. **Shares & RSS** lists
+links and lets their publisher change passwords, expiry and download options, or
+revoke them. `BASE_URL` must be the canonical HTTP(S) address used by recipients.
+New web shares default to seven days; no expiry is also supported.
+
+Links use random slugs by default. Anyone with an unprotected link can access its
+contents. Optional passwords use HTTP Basic authentication (any username), with
+hashed storage, throttled failures and signed browser grants. Password changes
+invalidate old grants. Collection and series shares follow their current contents;
+every media request checks the publisher's current account and library permissions.
+RSS enclosures contain original files; multi-file books have one feed entry per
+part. Indexing is discouraged by HTTP and RSS directives, not relied on for access
+control. A downloadable file already obtained by a recipient cannot be revoked.
+
+Public pages play through files, save a place locally in the recipient's browser,
+and fall back to the local FFmpeg/HLS converter when needed. Shared playback does
+not write progress, history or listening sessions into the publisher's account.
+Book archive and companion-file links appear only when downloads are enabled;
+RSS clients can save the audio they are allowed to stream regardless of this option.
+No shares are created automatically during deployment.

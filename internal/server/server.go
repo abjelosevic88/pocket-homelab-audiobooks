@@ -54,6 +54,7 @@ type Server struct {
 	coreUIDMu sync.Mutex
 	coreUID   map[string]string // Core-held key → the Audiobookshelf user it belongs to
 
+	nativeShareAttempts shareAttempts
 	nativePodcastMu     sync.Mutex
 	nativePodcastCancel map[string]context.CancelFunc
 	nativeScanMu        sync.Mutex

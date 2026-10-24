@@ -1,3 +1,5 @@
+import { useState } from 'react'
+import { ShareDialog } from '../components/ShareDialog'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { useApp } from '../lib/app-context'
 import { usePlayer } from '../lib/player'
@@ -15,7 +17,8 @@ export default function SeriesPage() {
   const { id = '' } = useParams()
   const [sp] = useSearchParams()
   const lib = sp.get('library') || localStorage.getItem('pab-library') || ''
-  const { settings } = useApp()
+  const { settings, user } = useApp()
+  const [sharing,setSharing]=useState(false)
   const p = usePlayer()
   const { data: s, error, notConnected } = useApi<SeriesT>(`${V1}/series/${encodeURIComponent(id)}?library=${encodeURIComponent(lib)}`)
   useCrumb(s?.name)
@@ -38,6 +41,8 @@ export default function SeriesPage() {
           {!go && s.books.length > 0 && <p className="ok-text mt"><Icon name="check" size={14} /> You finished the whole series.</p>}
         </div>
       </section>
+      {settings?.backend==='native' && user?.role==='admin' && <button className="btn" onClick={()=>setSharing(true)}>Share series & RSS</button>}
+      {sharing && <ShareDialog kind="series" target={id} name={s.name} onClose={()=>setSharing(false)} />}
       <ul className="book-list">{s.books.map(b => <BookRow key={b.id} b={b} n={b.sequence || '·'} />)}</ul>
     </div>
   )

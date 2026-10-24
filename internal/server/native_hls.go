@@ -33,6 +33,12 @@ func (s *Server) nativeHLS(w http.ResponseWriter, r *http.Request, uid int64, se
 		s.nativeError(w, err)
 		return
 	}
+	s.nativeHLSTracks(w, r, uid, session.ItemID, tracks, name)
+}
+
+// Also used by public shares after validating the exact item/file membership.
+// This does not create a listening session or touch the publisher's progress.
+func (s *Server) nativeHLSTracks(w http.ResponseWriter, r *http.Request, uid int64, itemID string, tracks []library.Track, name string) {
 	if name == "index.m3u8" {
 		var b strings.Builder
 		b.WriteString("#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:6\n#EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-PLAYLIST-TYPE:VOD\n")
@@ -73,7 +79,7 @@ func (s *Server) nativeHLS(w http.ResponseWriter, r *http.Request, uid int64, se
 		return
 	}
 	tr := tracks[ti]
-	file, _, err := s.catalog().OpenFile(r.Context(), uid, session.ItemID, tr.ID, false)
+	file, _, err := s.catalog().OpenFile(r.Context(), uid, itemID, tr.ID, false)
 	if err != nil {
 		s.nativeError(w, err)
 		return
@@ -102,7 +108,7 @@ func (s *Server) nativeHLS(w http.ResponseWriter, r *http.Request, uid int64, se
 	cmd.Stdout = &out
 	// Do not expose paths or embedded source metadata in errors returned to apps.
 	if err = cmd.Run(); err != nil {
-		s.log.Warn("native conversion failed", "session", sessionID, "error", err)
+		s.log.Warn("native conversion failed", "item", itemID, "error", err)
 		writeErr(w, 502, "audio conversion failed")
 		return
 	}

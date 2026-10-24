@@ -1,3 +1,5 @@
+import { useApp } from '../lib/app-context'
+import { ShareDialog } from '../components/ShareDialog'
 import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { api, V1 } from '../lib/api'
@@ -9,6 +11,8 @@ type Entry = { libraryItemId: string; episodeId?: string }
 type Item = { id: string; media: { metadata: { title: string; authorName: string } } }
 type List = { can_edit: boolean; id: string; name: string; description: string; revision: number; entries: Entry[]; books?: Item[]; items?: { libraryItem: Item; episode?: { title: string } }[] }
 export default function Lists() {
+  const {user}=useApp()
+  const [sharing,setSharing]=useState<List>()
   const [params, setParams] = useSearchParams()
   const kind = params.get('kind') === 'playlists' ? 'playlists' : 'collections'
   const base = `${V1}/organize/${kind}`
@@ -44,7 +48,7 @@ export default function Lists() {
     {!data && !error && <Loading />}
     {data?.[kind]?.length === 0 && <p>No lists yet.</p>}
     {data?.[kind]?.map(list => <section className="set-section" key={list.id}>
-      <div className="set-section-head"><div className="grow"><h2>{list.name}</h2>{list.description && <p>{list.description}</p>}</div>{list.can_edit && <><button type="button" className="btn" onClick={() => setEditing(list)}>Edit list</button><button type="button" className="btn" onClick={() => setDeleting(list)}>Delete list</button></>}</div>
+      <div className="set-section-head"><div className="grow"><h2>{list.name}</h2>{list.description && <p>{list.description}</p>}</div>{kind==='collections' && user?.role==='admin' && <button className="btn" onClick={()=>setSharing(list)}>Share collection & RSS</button>}{list.can_edit && <><button type="button" className="btn" onClick={() => setEditing(list)}>Edit list</button><button type="button" className="btn" onClick={() => setDeleting(list)}>Delete list</button></>}</div>
       <ol className="set-section-body stack">{list.entries.map((entry, i) => {
         const item = kind === 'collections' ? list.books?.[i] : list.items?.[i]?.libraryItem
         return <li className="row wrap" key={`${entry.libraryItemId}:${entry.episodeId || ''}`}>
@@ -55,6 +59,7 @@ export default function Lists() {
         </li>
       })}</ol>
     </section>)}
+    {sharing && <ShareDialog kind="collection" target={sharing.id} name={sharing.name} onClose={()=>setSharing(undefined)} />}
     {editing && <Modal title="Edit list" onClose={() => setEditing(null)}><form className="stack" onSubmit={rename}><Field label="List name"><input required value={editing.name} onChange={e => setEditing({ ...editing, name: e.target.value })} /></Field><Field label="Description"><textarea value={editing.description} onChange={e => setEditing({ ...editing, description: e.target.value })} /></Field><button type="submit" className="btn primary" disabled={busy}>Save list</button></form></Modal>}
     {deleting && <Confirm title="Delete list?" message={`Delete “${deleting.name}”? Its books and listening history will remain.`} confirmLabel="Delete list" onCancel={() => setDeleting(null)} onConfirm={remove} />}
   </div>

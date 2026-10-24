@@ -21,6 +21,7 @@ import UpNext from './pages/UpNext'
 import History from './pages/History'
 import Stats from './pages/Stats'
 import Lists from './pages/Lists'
+import Shares from './pages/Shares'
 import Podcasts from './pages/Podcasts'
 import Settings from './pages/Settings'
 
@@ -59,6 +60,7 @@ function App() {
           <Route path="/up-next" element={<UpNext />} />
           <Route path="/history" element={<History />} />
           <Route path="/stats" element={<Stats />} />
+          <Route path="/shares" element={<Shares />} />
           <Route path="/lists" element={<Lists />} />
           <Route path="/podcasts/:id?" element={<Podcasts />} />
           <Route path="*" element={<Navigate to="/" replace />} />

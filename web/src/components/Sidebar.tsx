@@ -20,7 +20,7 @@ const YOURS: NavItem[] = [
 ]
 
 export function Sidebar({ onNavigate }: { onNavigate: () => void }) {
-  const { status, settings } = useApp()
+  const { status, settings, user } = useApp()
   const p = usePlayer()
   const navigate = useNavigate()
   const title = settings?.title || status?.title || 'Pocket Audiobooks'
@@ -47,7 +47,7 @@ export function Sidebar({ onNavigate }: { onNavigate: () => void }) {
         <NavLink to="/" end onClick={onNavigate} className={({ isActive }) => `sb-nav-item ${isActive ? 'active' : ''}`}><Icon name="home" size={16} />Home</NavLink>
       </nav>
       <Group title="Library"><Nav items={settings?.backend === 'native' ? [...LIBRARY, { to: '/lists', label: 'Collections & playlists', icon: 'layers' }, { to: '/podcasts', label: 'Podcasts', icon: 'headphones' }] : LIBRARY} onNavigate={onNavigate} /></Group>
-      <Group title="Yours"><Nav items={YOURS} onNavigate={onNavigate} /></Group>
+      <Group title="Yours"><Nav items={settings?.backend==='native' && user?.role==='admin' ? [...YOURS,{to:'/shares',label:'Shares & RSS',icon:'external'}] : YOURS} onNavigate={onNavigate} /></Group>
 
       <div className="sb-foot">
         <Link to="/settings" className="sb-foot-link" onClick={onNavigate}><Icon name="settings" size={15} />Settings</Link>

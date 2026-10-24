@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api, V1 } from '../lib/api'
+import { useApp } from '../lib/app-context'
+import { ShareDialog } from '../components/ShareDialog'
 import { usePlayer } from '../lib/player'
 import type { Book } from '../lib/types'
 import { Loading, errMsg, useToast } from '../components/ui'
@@ -12,6 +14,8 @@ type Settings = { auto_download: boolean; interval_seconds: number; max_new: num
 type Detail = { item: Show; episodes: Episode[]; settings: Settings; can_manage: boolean; error: string; last_check: number }
 export default function Podcasts() {
   const { id } = useParams()
+  const {user}=useApp()
+  const [sharing,setSharing]=useState<{id:string;title:string}>()
   const [data, setData] = useState<{ items: Show[]; libraries: Library[]; can_subscribe: boolean } | null>(null)
   const [detail, setDetail] = useState<Detail | null>(null)
   const [error, setError] = useState('')
@@ -36,6 +40,8 @@ export default function Podcasts() {
   if (id) {
     if (!detail || !settings) return <Loading />
     return <div className="stack loose"><Link to="/podcasts">All podcasts</Link><h1>{detail.item.title}</h1><p className="muted">{detail.item.author}</p>
+      {user?.role==='admin' && <button className="btn" onClick={()=>setSharing({id:'',title:detail.item.title})}>Share podcast & RSS</button>}
+      {sharing && <ShareDialog kind="item" target={id} episode={sharing.id} name={sharing.title} onClose={()=>setSharing(undefined)} />}
       {detail.can_manage && <details><summary>Subscription settings</summary><form className="stack mt" onSubmit={e => { e.preventDefault(); void act(() => api.put(`${V1}/podcasts/${encodeURIComponent(id)}/settings`, settings)) }}>
         <label><input type="checkbox" checked={settings.auto_download} onChange={e => setSettings({ ...settings, auto_download: e.target.checked })} /> Download newly published episodes automatically</label>
         <label>Check every <select value={settings.interval_seconds} onChange={e => setSettings({ ...settings, interval_seconds: Number(e.target.value) })}><option value={300}>5 minutes</option><option value={3600}>hour</option><option value={21600}>6 hours</option><option value={86400}>day</option></select></label>
@@ -46,6 +52,7 @@ export default function Podcasts() {
       {detail.error && <p className="callout danger">{detail.error}</p>}
       {!detail.episodes.length && <p className="muted">Check the feed to find episodes.</p>}
       {detail.episodes.map(ep => <section className="set-section" key={ep.id}><div className="set-section-body row wrap"><div className="grow"><b>{ep.title}</b><p className="small muted">{ep.publishedAt ? new Date(ep.publishedAt).toLocaleDateString() : ''} {ep.status && ep.status !== 'complete' ? ` · ${ep.status}` : ''}</p>{ep.error && <p className="small danger-text">{ep.error}</p>}</div>
+        {ep.downloaded && user?.role==='admin' && <button className="btn" onClick={()=>setSharing({id:ep.id,title:ep.title})}>Share episode</button>}
         {ep.downloaded ? <button type="button" className="btn primary" disabled={busy} onClick={() => act(async () => { const { book } = await api.get<{ book: Book }>(`${V1}/podcasts/${encodeURIComponent(id)}/episodes/${encodeURIComponent(ep.id)}`); p.play(book) })}>Play episode</button> : detail.can_manage && (ep.status === 'queued' || ep.status === 'running' ? <button type="button" className="btn" disabled={busy} onClick={() => act(() => api.del(`${V1}/podcasts/jobs/${encodeURIComponent(ep.job_id!)}`))}>Cancel download</button> : <button type="button" className="btn" disabled={busy} onClick={() => act(() => api.post(`${V1}/podcasts/${encodeURIComponent(id)}/episodes/${encodeURIComponent(ep.id)}/download`, {}))}>Download episode</button>)}
       </div></section>)}
     </div>
