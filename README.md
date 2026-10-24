@@ -72,8 +72,8 @@ in its own folder; multi-file books and CD/disc subfolders are supported.
   reorder/exclude tracks, and export metadata or original-file downloads.
 - Recoverable Trash, application backup/restore, M4B generation and metadata
   embedding. Generated files can be selected for playback while originals stay.
-- EPUB/PDF reading and existing podcast support are available too. This is an
-  audiobook app, not a promise of every Audiobookshelf feature.
+- Companion EPUB/PDF reading is available alongside your audiobooks. Podcasts
+  belong in your dedicated podcast app: there are no podcast screens or workers.
 
 ## Connect Pocket Homelab
 
@@ -94,7 +94,8 @@ API extensions; compatibility is tested at the protocol level, not on every app.
 ## Migration and backups
 
 The migration command reads a consistent Audiobookshelf SQLite snapshot, maps
-media folders and explicitly maps retained accounts. It preserves identifiers,
+media folders and explicitly maps retained accounts. Imports include book libraries
+only, excluding podcasts and their listening state. It preserves identifiers,
 metadata, chapters, files, personal progress, bookmarks and listening history.
 It defaults to a dry run and refuses a nonempty native catalog. See
 [migration and verification](docs/standalone-migration.md).

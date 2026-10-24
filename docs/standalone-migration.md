@@ -2,6 +2,16 @@
 
 Status: standalone production cutover completed on 2026-10-24. Pocket Audiobooks 1.0.0 uses the native Go backend; Audiobookshelf is stopped with automatic restart disabled. Original source data is retained for recovery.
 
+## Audiobook-only follow-up (2026-10-24)
+
+The owner has a dedicated podcast app and requested no podcast features here.
+Version 1.1.0 removes podcast screens and subscription/discovery API routes, stops
+the podcast worker, and restricts catalog and native client access to books.
+Existing podcast libraries are archived, their jobs disabled, and source files
+left untouched. New imports skip podcast libraries and personal episode state.
+The original migration counts below are historical; active production now has
+three book libraries and 1,506 books. Recovery copies retain the original source.
+
 ## Accepted scope (updated 2026-10-24)
 
 The owner clarified that this should be an independent audiobook app with standard
@@ -13,7 +23,8 @@ Pocket Core/native-app/Day/Bookshelf connections. Migrate only the source `root`
 account and preserve its books and listening state. Keep the Pocket stack: Go,
 SQLite, React/TypeScript and one app container.
 
-Already implemented podcast, reader, sharing and conversion features remain usable.
+Reader, audiobook sharing and conversion features remain usable. Podcast support
+was subsequently retired as described above.
 Unimplemented specialized providers, ereader delivery, comic readers, arbitrary
 file regrouping and exact third-party-client parity are outside this release.
 The historical parity matrix below records implementation coverage; pending rows

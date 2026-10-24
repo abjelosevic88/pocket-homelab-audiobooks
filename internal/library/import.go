@@ -275,6 +275,9 @@ func (c *Catalog) Import(ctx context.Context, opt ImportOptions) (ImportReport, 
 	if err != nil {
 		return report, err
 	}
+	if c.BooksOnly {
+		excludeSourcePodcasts(data, report.ExcludedRows)
+	}
 	pending := []statement{}
 	add := func(table, columns, marks string, args ...any) {
 		pending = append(pending, statement{`INSERT INTO ` + table + ` (` + columns + `) VALUES (` + marks + `)`, args})

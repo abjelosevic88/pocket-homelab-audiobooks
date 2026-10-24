@@ -191,6 +191,9 @@ type NewLibrary struct {
 }
 
 func (c *Catalog) CreateLibrary(ctx context.Context, uid int64, in NewLibrary) (string, error) {
+	if c.BooksOnly && in.MediaType != "book" {
+		return "", ErrInvalid
+	}
 	if err := c.CanManageLibraries(ctx, uid); err != nil {
 		return "", err
 	}

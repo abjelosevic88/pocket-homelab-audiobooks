@@ -233,36 +233,6 @@ func (s *Server) nativeItem(ctx context.Context, uid int64, id string) (nativeOb
 	if it.MediaType == "book" {
 		media["audioFiles"] = audio
 	}
-	if it.MediaType == "podcast" {
-		available := map[string]bool{}
-		for _, f := range files {
-			available[f.ID] = true
-		}
-		episodes := []any{}
-		duration := 0.0
-		for _, v := range nativeArray(doc["episodes"]) {
-			ep := nativeMap(v)
-			if !available[nativeString(nativeMap(ep["audioFile"])["ino"])] {
-				continue
-			}
-			ep = episodeCompat(ep)
-			ep["libraryItemId"] = it.ID
-			episodes = append(episodes, ep)
-			duration += nativeNumber(nativeMap(ep["audioFile"])["duration"])
-		}
-		media["episodes"] = episodes
-		media["numEpisodes"] = len(episodes)
-		media["duration"] = duration
-		meta["feedUrl"] = m["feedURL"]
-		meta["imageUrl"] = m["imageURL"]
-		subscription, e := s.catalog().PodcastSubscription(ctx, uid, it.ID)
-		if e != nil {
-			return nil, e
-		}
-		media["autoDownloadEpisodes"], media["autoDownloadSchedule"] = subscription.Auto, subscription.Schedule
-		media["lastEpisodeCheck"], media["maxEpisodesToKeep"], media["maxNewEpisodesToDownload"] = subscription.LastCheck, subscription.Keep, subscription.MaxNew
-		media["scheduleTimezone"] = subscription.Timezone
-	}
 	media["numAudioFiles"], media["numTracks"], media["numChapters"] = len(audio), len(audio), len(nativeArray(m["chapters"]))
 	if it.MediaType == "podcast" {
 		media["numTracks"] = media["numEpisodes"]
@@ -452,4 +422,10 @@ func nativeDecodeItem(it nativeObject) (abs.Item, error) {
 	var out abs.Item
 	err := json.Unmarshal(nativeJSON(it), &out)
 	return out, err
+}
+
+func nativeMapJSON(v any) nativeObject {
+	out := nativeObject{}
+	_ = json.Unmarshal(nativeJSON(v), &out)
+	return out
 }

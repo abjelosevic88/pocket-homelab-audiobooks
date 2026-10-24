@@ -17,7 +17,12 @@ import (
 var ErrNotFound = errors.New("catalog entry not found")
 var ErrImported = errors.New("native catalog already contains an import; use a fresh staging database")
 
-type Catalog struct{ DB *sql.DB }
+type Catalog struct {
+	DB *sql.DB
+	// BooksOnly limits the running audiobook product. Older catalog schemas and
+	// recovery tools can still inspect retired podcast records without serving them.
+	BooksOnly bool
+}
 
 type Permissions struct {
 	Download         bool     `json:"download"`
@@ -129,7 +134,7 @@ func (c *Catalog) Item(ctx context.Context, userID int64, id string) (Item, erro
 	if err != nil {
 		return Item{}, err
 	}
-	if !a.allows(it) {
+	if !a.allows(it) || (c.BooksOnly && it.MediaType != "book") {
 		return Item{}, ErrNotFound
 	}
 	return it, nil
@@ -177,7 +182,7 @@ func (c *Catalog) Items(ctx context.Context, userID int64, q Query) (Page, error
 		if err != nil {
 			return out, err
 		}
-		if !a.allows(it) || (search != "" && !strings.Contains(strings.ToLower(it.Title+" "+it.Author), search)) {
+		if (c.BooksOnly && it.MediaType != "book") || !a.allows(it) || (search != "" && !strings.Contains(strings.ToLower(it.Title+" "+it.Author), search)) {
 			continue
 		}
 		if out.Total >= q.Offset && len(out.Items) < q.Limit {
@@ -204,7 +209,7 @@ func (c *Catalog) Libraries(ctx context.Context, userID int64) ([]Library, error
 			rows.Close()
 			return nil, err
 		}
-		if a.allowsLibrary(l.ID) {
+		if a.allowsLibrary(l.ID) && (!c.BooksOnly || l.MediaType == "book") {
 			result = append(result, l)
 		}
 	}

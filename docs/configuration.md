@@ -37,7 +37,7 @@ mounted folders; library metadata and personal state live in SQLite. Add a mount
 folder under Settings → Libraries, scan it, and optionally enable periodic scans.
 FFmpeg and FFprobe are included in the container (`FFMPEG_PATH` and `FFPROBE_PATH`
 can override executable paths). The process needs read access to the media and
-write access for uploads, Trash, metadata tools and podcast downloads.
+write access for audiobook uploads, Trash and metadata tools.
 
 `MEDIA_BACKEND=audiobookshelf` retains the historical gateway for migration
 rollback. Only that mode uses `AUDIOBOOKSHELF_URL`, `AUDIOBOOKSHELF_PUBLIC_URL`,
@@ -108,7 +108,7 @@ are at `/reader-licenses.txt`.
 ### Native shares and RSS
 
 Administrators with download permission can create **Share & RSS** links from
-books, series, collections or downloaded podcast episodes. **Shares & RSS** lists
+books, series or collections. **Shares & RSS** lists
 links and lets their publisher change passwords, expiry and download options, or
 revoke them. `BASE_URL` must be the canonical HTTP(S) address used by recipients.
 New web shares default to seven days; no expiry is also supported.

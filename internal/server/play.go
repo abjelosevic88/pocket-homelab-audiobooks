@@ -120,6 +120,10 @@ func (s *Server) handlePlay(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "invalid json")
 		return
 	}
+	if s.cfg.Backend == "native" && in.Episode != "" {
+		writeErr(w, 400, "only audiobook playback is supported")
+		return
+	}
 	if !clientRE.MatchString(in.Client) {
 		in.Client = ""
 	}
@@ -132,7 +136,7 @@ func (s *Server) handlePlay(w http.ResponseWriter, r *http.Request) {
 		s.absErr(w, err)
 		return
 	}
-	if !(s.cfg.Backend == "native" && it.MediaType == "podcast" && in.Episode != "") && (it.MediaType != "book" || it.Media.NumAudioFiles == 0 && len(it.Media.AudioFiles) == 0) {
+	if it.MediaType != "book" || it.Media.NumAudioFiles == 0 && len(it.Media.AudioFiles) == 0 {
 		writeErr(w, http.StatusBadRequest, "this book has no audio")
 		return
 	}
@@ -143,13 +147,6 @@ func (s *Server) handlePlay(w http.ResponseWriter, r *http.Request) {
 	}
 	me, _ := ac.c.Me(ctx)
 	b := bookOf(it, progressMap(me), true)
-	if in.Episode != "" && s.cfg.Backend == "native" {
-		b, err = s.nativeEpisodeBook(ctx, u.ID, id, in.Episode)
-		if err != nil {
-			s.nativeError(w, err)
-			return
-		}
-	}
 	ps.cover = b.Cover
 	st, _ := s.store.GetSettings(ctx, u.ID)
 	writeJSON(w, http.StatusOK, map[string]any{

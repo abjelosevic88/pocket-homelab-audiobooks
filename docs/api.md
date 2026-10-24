@@ -176,35 +176,19 @@ and reordered totals do not add listening twice. Old offline uploads cannot
 replace a newer online position or manual progress edit. Imported sessions are
 reconciled transactionally, retaining their original record as audit data.
 
-### Native podcasts
+### Audiobook-only scope
 
-`GET /api/v1/podcasts` lists accessible subscriptions and podcast libraries.
-`POST /api/v1/podcasts/subscribe` accepts `library_id`, `folder_id`, and an RSS/Atom
-`url`. `GET /api/v1/podcasts/{id}` returns downloaded/discovered episodes, job
-status, subscription settings and the caller's management capability.
-
-- `POST /{id}/check`: check for episodes without changing downloaded metadata.
-- `PUT /{id}/settings`: `auto_download`, `interval_seconds` (300–604800),
-  `max_new` (1–100), and `keep_latest` (currently must be zero; retention pending).
-- `POST /{id}/episodes/{episode}/download`: enqueue a persistent download job.
-- `DELETE /jobs/{job}`: cancel a queued/running download. Publication and job
-  completion share a transaction, so cancellation cannot mislabel a saved file.
-- `GET /{id}/episodes/{episode}`: the web player's episode and resume position.
-- `GET /opml`: export accessible subscriptions. `POST /opml` with `{ "opml": "…" }`
-  parses an import preview; the web app subscribes to each selected file's feeds
-  and reports individual results.
-
-The paths above are relative to `/api/v1/podcasts`. A single download worker uses
-bounded disk spooling and validates audio with FFprobe before publishing. Restart
-marks interrupted jobs failed for explicit retry. Imported episode IDs and saved
-positions survive missing-file repair. The global player accepts `episode_id` in
-`POST /api/v1/play/{id}` and restores an episode independently of other episodes.
+Podcast routes are unavailable (404), podcast library creation is rejected, and
+library/item/media/progress APIs expose only books. Old podcast libraries are
+archived on upgrade and their download jobs disabled. Their source files and
+recovery records are retained; no podcast scheduler runs. New imports omit podcast
+libraries, episodes and related personal state.
 
 ## Native sharing
 
 - `GET|POST /api/v1/shares`; `PUT|DELETE /api/v1/shares/{id}`: the administrator's
   shares. Creation accepts `kind` (`item`, `series`, `collection`), `target_id`,
-  optional `episode_id`, `name`, optional `password`, `downloadable`, and
+  `name`, optional `password`, `downloadable`, and
   `expires_at` (Unix milliseconds, zero for no expiry). Updates require `revision`.
   Omit `password` to retain it; an empty password removes protection.
 - `GET|HEAD /share/{slug}`: public player; `/feed/{slug}`: RSS; media paths beneath

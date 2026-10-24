@@ -23,7 +23,6 @@ import Stats from './pages/Stats'
 import Lists from './pages/Lists'
 import Shares from './pages/Shares'
 import Trash from './pages/Trash'
-import Podcasts from './pages/Podcasts'
 import Settings from './pages/Settings'
 
 const Reader = lazy(() => import('./pages/Reader'))
@@ -71,7 +70,6 @@ function App() {
           <Route path="/shares" element={<Shares />} />
           <Route path="/trash" element={<Trash />} />
           <Route path="/lists" element={<Lists />} />
-          <Route path="/podcasts/:id?" element={<Podcasts />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Route>

@@ -76,12 +76,8 @@ func (s *Server) nativeAPI(w http.ResponseWriter, r *http.Request, uid int64) {
 		s.nativeShareCompat(w, r, uid)
 		return
 	}
-	if path == "/api/search/podcast" && read {
-		s.nativePodcastSearch(w, r, uid)
-		return
-	}
-	if path == "/api/podcasts" || strings.HasPrefix(path, "/api/podcasts/") {
-		s.nativePodcastCompat(w, r, uid)
+	if path == "/api/search/podcast" || path == "/api/podcasts" || strings.HasPrefix(path, "/api/podcasts/") {
+		writeErr(w, 404, "podcasts are handled by your dedicated podcast app")
 		return
 	}
 	if path == "/api/upload" && method == "POST" {
@@ -762,12 +758,6 @@ func (s *Server) nativeLibraryAPI(w http.ResponseWriter, r *http.Request, uid in
 		respond(s.nativeLibraryStats(r, items))
 	case "narrators":
 		respond(nativeObject{"narrators": nativeNarrators(items)})
-	case "recent-episodes", "opml", "podcast-titles", "episode-downloads":
-		if current["mediaType"] != "podcast" {
-			writeErr(w, 404, "podcast library not found")
-			return
-		}
-		s.nativePodcastLibrary(w, r, uid, lib, tail[0], items, progress, limit, page)
 	case "download":
 		ids := strings.Split(q.Get("ids"), ",")
 		allowed := map[string]bool{}

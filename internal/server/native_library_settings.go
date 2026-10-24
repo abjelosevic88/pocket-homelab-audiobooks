@@ -40,7 +40,7 @@ func (s *Server) nativeLibrarySettings(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, v)
 		return
 	}
-	rows, err := s.store.DB.QueryContext(ctx, `SELECT id FROM catalog_libraries ORDER BY display_order,id`)
+	rows, err := s.store.DB.QueryContext(ctx, `SELECT id FROM catalog_libraries WHERE media_type='book' ORDER BY display_order,id`)
 	if err != nil {
 		s.nativeError(w, err)
 		return

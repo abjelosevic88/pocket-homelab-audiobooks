@@ -49,7 +49,7 @@ export function NativeLibrarySettings() {
       const latest = lib.jobs[0]
       const running = lib.jobs.find(job => job.status === 'running')
       return <section className="set-section" key={lib.id}>
-        <div className="set-section-head"><div className="grow"><h3>{lib.name}</h3><p>{lib.count.toLocaleString()} {lib.media_type === 'podcast' ? 'podcasts' : 'books'}</p></div></div>
+        <div className="set-section-head"><div className="grow"><h3>{lib.name}</h3><p>{lib.count.toLocaleString()} books</p></div></div>
         {lib.can_scan && <div className="set-section-body stack">
           <label><input type="checkbox" checked={lib.watch} onChange={e => watch(lib, e.target.checked)} /> Automatically check for file changes</label>
           {lib.watch && <label>Check every <select value={lib.interval_seconds || 600} onChange={e => watch(lib, true, Number(e.target.value))}><option value={60}>minute</option><option value={600}>10 minutes</option><option value={3600}>hour</option><option value={86400}>day</option></select></label>}
@@ -69,7 +69,6 @@ export function NativeLibrarySettings() {
     })}
     {user?.role === 'admin' && <><LibrarySettingsEditor refresh={libraries.map(l=>l.id).join(',')} onChanged={()=>void load()}/><NativeAccounts /><MetadataSettings /></>}
     {user?.role === 'admin' && <section className="set-section"><div className="set-section-head"><h3>Add a library</h3></div><form className="set-section-body stack" onSubmit={create}>
-      <label>Media type<select value={newLibrary.media_type} onChange={e => setNewLibrary({ ...newLibrary, media_type: e.target.value })}><option value="book">Books</option><option value="podcast">Podcasts</option></select></label>
       <label>Name<input required value={newLibrary.name} onChange={e => setNewLibrary({ ...newLibrary, name: e.target.value })} /></label>
       <label>Folder on the server<input required placeholder="/media/audiobooks" value={newLibrary.path} onChange={e => setNewLibrary({ ...newLibrary, path: e.target.value })} /></label>
       <p className="muted small">Use an existing folder mounted into this app's container.</p>

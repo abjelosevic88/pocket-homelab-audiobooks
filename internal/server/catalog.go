@@ -14,7 +14,7 @@ import (
 // These additive endpoints expose the native catalog for migration verification.
 // They never call upstream. The existing player stays on its current backend
 // until the independent playback engine and client contracts are validated.
-func (s *Server) catalog() *library.Catalog { return &library.Catalog{DB: s.store.DB} }
+func (s *Server) catalog() *library.Catalog { return &library.Catalog{DB: s.store.DB, BooksOnly: true} }
 func (s *Server) catalogError(w http.ResponseWriter, err error) {
 	if errors.Is(err, library.ErrNotFound) || errors.Is(err, fs.ErrNotExist) || errors.Is(err, fs.ErrPermission) {
 		writeErr(w, http.StatusNotFound, "catalog entry not found")

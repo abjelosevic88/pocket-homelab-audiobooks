@@ -42,7 +42,7 @@ func runCatalogImport(args []string) {
 	_, _, st, lease := mustLoadExclusive()
 	defer lease.Close()
 	defer st.Close()
-	report, err := (&library.Catalog{DB: st.DB}).Import(context.Background(), opt)
+	report, err := (&library.Catalog{DB: st.DB, BooksOnly: true}).Import(context.Background(), opt)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "import failed:", err)
 		os.Exit(1)

@@ -19,7 +19,7 @@ func (s *Server) nativeAccounts(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		// Administration lists library names without exposing books or listening.
-		rows, err := s.store.DB.QueryContext(ctx, `SELECT id,name FROM catalog_libraries ORDER BY display_order,name`)
+		rows, err := s.store.DB.QueryContext(ctx, `SELECT id,name FROM catalog_libraries WHERE media_type='book' ORDER BY display_order,name`)
 		if err != nil {
 			s.nativeError(w, err)
 			return

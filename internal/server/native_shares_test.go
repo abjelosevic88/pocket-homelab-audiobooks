@@ -167,7 +167,7 @@ func TestNativeSharePasswordThrottle(t *testing.T) {
 	}
 }
 
-func TestNativeShareClientContractsAndEpisodeBoundary(t *testing.T) {
+func TestNativeShareClientContractsRejectRetiredPodcasts(t *testing.T) {
 	s, h, a, _, tok := nativeHarness(t)
 	s.cfg.BaseURL = "https://audio.example.test"
 	s.store.DB.Exec(`UPDATE users SET role='admin' WHERE id=?`, a.u.ID)
@@ -189,19 +189,13 @@ func TestNativeShareClientContractsAndEpisodeBoundary(t *testing.T) {
 	if w := publicShareCall(h, "GET", "/feed/client-feed", "", nil); w.Code != 404 {
 		t.Fatal("closed compatibility feed active")
 	}
-	// A podcast episode share may not expose another episode even with downloads enabled.
-	s.store.DB.Exec(`UPDATE catalog_items SET media_type='podcast',document=json_set(document,'$.episodes',json('[{"id":"one","title":"One","audioFile":{"ino":"11","duration":50}},{"id":"two","title":"Two","audioFile":{"ino":"12","duration":50}}]')) WHERE id='book'`)
-	w := nativeCall(t, h, tok, "POST", "/api/share/mediaitem", `{"slug":"one-episode","mediaItemType":"podcastEpisode","mediaItemId":"one","isDownloadable":true,"expiresAt":0}`)
-	if w.Code != 201 {
+	// Restored legacy podcast records cannot create or expose public shares.
+	s.store.DB.Exec(`UPDATE catalog_items SET media_type='podcast',document=json_set(document,'$.episodes',json('[{"id":"one","title":"One","audioFile":{"ino":"11","duration":50}}]')) WHERE id='book'`)
+	if w := nativeCall(t, h, tok, "POST", "/api/share/mediaitem", `{"slug":"one-episode","mediaItemType":"podcastEpisode","mediaItemId":"one","isDownloadable":true}`); w.Code != 404 {
 		t.Fatal(w.Code, w.Body.String())
 	}
-	if w := publicShareCall(h, "GET", "/share/one-episode/file/book/11", "", nil); w.Code != 206 {
-		t.Fatal("shared episode unavailable", w.Code, w.Body.String())
+	if w := publicShareCall(h, "GET", "/share/one-episode/file/book/11", "", nil); w.Code != 404 {
+		t.Fatal("retired episode exposed", w.Code)
 	}
-	if w := publicShareCall(h, "GET", "/share/one-episode/file/book/12", "", nil); w.Code != 404 {
-		t.Fatal("other episode leaked", w.Code)
-	}
-	if w := publicShareCall(h, "GET", "/share/one-episode/download/book", "", nil); w.Code != 403 {
-		t.Fatal("podcast archive leaked", w.Code)
-	}
+
 }

@@ -3,9 +3,7 @@ package server
 import (
 	"context"
 	"encoding/base64"
-	"fmt"
 	"net/url"
-	"strings"
 	"testing"
 )
 
@@ -76,55 +74,6 @@ func TestNativeBrowseStandardFiltersPagingAndStatistics(t *testing.T) {
 		t.Fatal("count leak", stats)
 	}
 }
-func TestNativePodcastBrowseKeepsEpisodeProgressSeparate(t *testing.T) {
-	s, h, a, _, tok := nativeHarness(t)
-	ctx := context.Background()
-	s.store.DB.Exec(`INSERT INTO catalog_libraries VALUES('pods','Podcasts','podcast',1,'{}')`)
-	episodes := []any{}
-	for i := 1; i <= 2; i++ {
-		episodes = append(episodes, nativeObject{"id": fmt.Sprint(i), "title": fmt.Sprintf("Episode %d", i), "publishedAt": int64(i * 1000), "audioFile": nativeObject{"ino": fmt.Sprintf("ep-%d", i), "duration": 10, "metadata": nativeObject{"filename": "audio.mp3"}}})
-	}
-	doc := nativeObject{"media": nativeObject{"title": "A podcast", "feedURL": "https://example.com/feed.xml"}, "episodes": episodes}
-	if _, e := s.store.DB.Exec(`INSERT INTO catalog_items VALUES('pod','pods','pod-media','podcast','A podcast','Host',20,0,0,1,1,'[]',?)`, string(nativeJSON(doc))); e != nil {
-		t.Fatal(e)
-	}
-	for i := 1; i <= 2; i++ {
-		if _, e := s.store.DB.Exec(`INSERT INTO catalog_files VALUES('pod',?,'audio','root','audio.mp3','audio.mp3','audio/mpeg',15,10,?,0,'{}')`, fmt.Sprintf("ep-%d", i), i); e != nil {
-			t.Fatal(e)
-		}
-	}
-	if e := s.catalog().SetProgress(ctx, a.u.ID, "pod", "2", map[string]any{"isFinished": true}); e != nil {
-		t.Fatal(e)
-	}
-	if e := s.catalog().SetProgress(ctx, a.u.ID, "pod", "1", map[string]any{"currentTime": 3}); e != nil {
-		t.Fatal(e)
-	}
-	recent := jsonObject(t, nativeCall(t, h, tok, "GET", "/api/libraries/pods/recent-episodes", ""))
-	eps := nativeArray(recent["episodes"])
-	if len(eps) != 1 || nativeMap(eps[0])["id"] != "1" || nativeMap(eps[0])["podcast"] == nil {
-		t.Fatal(recent)
-	}
-	items := jsonObject(t, nativeCall(t, h, tok, "GET", "/api/libraries/pods/items", ""))
-	if nativeMap(nativeArray(items["results"])[0])["userMediaProgress"] != nil {
-		t.Fatal("episode progress attached to show", items)
-	}
-	w := nativeCall(t, h, tok, "GET", "/api/libraries/pods/personalized", "")
-	if w.Code != 200 || !strings.Contains(w.Body.String(), `"recentEpisode"`) || !strings.Contains(w.Body.String(), `"continue-listening"`) {
-		t.Fatal(w.Code, w.Body.String())
-	}
-	search := jsonObject(t, nativeCall(t, h, tok, "GET", "/api/libraries/pods/search?q=podcast", ""))
-	if len(nativeArray(search["podcast"])) != 1 || len(nativeArray(search["book"])) != 0 {
-		t.Fatal(search)
-	}
-	w = nativeCall(t, h, tok, "GET", "/api/libraries/pods/opml", "")
-	if w.Code != 200 || !strings.Contains(w.Body.String(), "https://example.com/feed.xml") {
-		t.Fatal(w.Code, w.Body.String())
-	}
-	if w = nativeCall(t, h, tok, "GET", "/api/libraries/lib/recent-episodes", ""); w.Code != 404 {
-		t.Fatal(w.Code)
-	}
-}
-
 func TestNativeFirstAccountCanUseLibraryWithoutRestart(t *testing.T) {
 	s, h, _ := testServer(t)
 	s.cfg.Backend = "native"

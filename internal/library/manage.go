@@ -40,7 +40,11 @@ func (c *Catalog) LibraryConfig(ctx context.Context, uid int64, id string) (Libr
 	if err := c.CanManageLibraries(ctx, uid); err != nil {
 		return LibraryConfig{}, err
 	}
-	return readLibraryConfig(ctx, c.DB, id)
+	v, err := readLibraryConfig(ctx, c.DB, id)
+	if err == nil && c.BooksOnly && v.MediaType != "book" {
+		return LibraryConfig{}, ErrNotFound
+	}
+	return v, err
 }
 
 type libraryQuery interface {
@@ -72,6 +76,14 @@ func readLibraryConfig(ctx context.Context, q libraryQuery, id string) (LibraryC
 	return v, rows.Err()
 }
 func (c *Catalog) SaveLibrary(ctx context.Context, uid int64, in LibraryConfig) error {
+	if c.BooksOnly && in.MediaType != "book" {
+		return ErrInvalid
+	}
+	if c.BooksOnly && in.ID != "" {
+		if _, err := c.LibraryConfig(ctx, uid, in.ID); err != nil {
+			return err
+		}
+	}
 	if err := c.CanManageLibraries(ctx, uid); err != nil {
 		return err
 	}

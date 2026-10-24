@@ -92,8 +92,6 @@ func (s *Server) Router() http.Handler {
 				r.Put("/shares/{share}", s.nativeShares)
 				r.Delete("/shares/{share}", s.nativeShares)
 				r.HandleFunc("/organize/*", s.nativeOrganize)
-				r.HandleFunc("/podcasts/*", s.nativePodcasts)
-				r.Get("/podcasts", s.nativePodcasts)
 				r.Get("/catalog/items/{id}/reader", s.nativeReader)
 				r.Put("/catalog/items/{id}/reader", s.nativeReader)
 				r.Get("/catalog/trash", s.nativeTrash)
