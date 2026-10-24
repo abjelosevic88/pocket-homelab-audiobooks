@@ -260,6 +260,7 @@ func (c *Catalog) PodcastEpisodes(ctx context.Context, uid int64, id string) ([]
 	for ep, doc := range downloaded {
 		if !seen[ep] {
 			e := PodcastEpisode{Downloaded: true}
+			normalizeEpisode(doc)
 			if err = json.Unmarshal([]byte(raw(doc)), &e.Episode); err != nil {
 				return nil, err
 			}
@@ -283,6 +284,15 @@ func (c *Catalog) PodcastEpisodes(ctx context.Context, uid int64, id string) ([]
 			if out[i].Duration == 0 {
 				out[i].Duration = number(object(old["audioFile"])["duration"])
 			}
+		}
+	}
+	for i := range out {
+		doc, _, e := c.EpisodeDocument(ctx, uid, id, out[i].ID)
+		if e != nil {
+			return nil, e
+		}
+		if e = json.Unmarshal([]byte(raw(doc)), &out[i].Episode); e != nil {
+			return nil, e
 		}
 	}
 	for i := range out {
@@ -473,10 +483,20 @@ func (c *Catalog) PublishEpisode(ctx context.Context, uid int64, id, episode, sp
 	if previous != nil {
 		edoc = previous
 	}
+	var edits string
+	err = tx.QueryRowContext(ctx, `SELECT document FROM catalog_podcast_episode_edits WHERE item_id=? AND episode_id=?`, id, episode).Scan(&edits)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	for k, v := range objectJSON(edits) {
+		edoc[k] = v
+	}
 	edoc["id"] = episode
 	edoc["podcastId"] = it.MediaID
 	edoc["audioFile"] = audio
-	edoc["chapters"] = probe.Chapters
+	if _, ok := objectJSON(edits)["chapters"]; !ok {
+		edoc["chapters"] = probe.Chapters
+	}
 	edoc["duration"] = probe.Duration
 	edoc["createdAt"] = time.Now().UTC().Format(time.RFC3339Nano)
 	episodes := []any{}

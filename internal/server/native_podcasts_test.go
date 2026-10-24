@@ -160,6 +160,31 @@ func TestNativePodcastSubscribeCheckDownloadAndPlayback(t *testing.T) {
 		t.Fatalf("repair lost progress %+v %v", book, err)
 	}
 
+	// Client and web editors share revision checks; feed refresh cannot erase edits.
+	editor := jsonObject(t, call(t, h, a, "GET", "/api/v1/podcasts/"+id+"/episodes/"+episode+"/editor", ""))
+	edit := string(nativeJSON(nativeObject{"revision": editor["revision"], "fields": nativeObject{"title": "Corrected episode", "description": "<p>Safe text</p><script>alert(1)</script>", "chapters": []any{nativeObject{"title": "First", "start": 0, "end": 1}}}}))
+	jsonObject(t, call(t, h, a, "PUT", "/api/v1/podcasts/"+id+"/episodes/"+episode+"/editor", edit))
+	if w = call(t, h, a, "PUT", "/api/v1/podcasts/"+id+"/episodes/"+episode+"/editor", edit); w.Code != 409 {
+		t.Fatal("stale episode edit", w.Code)
+	}
+	jsonObject(t, call(t, h, a, "POST", "/api/v1/podcasts/"+id+"/check", `{}`))
+	edited := jsonObject(t, nativeCall(t, h, tok, "GET", "/api/podcasts/"+id+"/episode/"+episode, ""))
+	if edited["title"] != "Corrected episode" || edited["description"] != "Safe text" {
+		t.Fatal("episode edit lost or unsafe", edited)
+	}
+	jsonObject(t, nativeCall(t, h, tok, "PATCH", "/api/podcasts/"+id+"/episode/"+episode, `{"season":"2","episode":"7"}`))
+	if w = nativeCall(t, h, tok, "PATCH", "/api/podcasts/"+id+"/episode/"+episode, `{"audioFile":{"ino":"other"}}`); w.Code != 400 {
+		t.Fatal("arbitrary file replacement", w.Code)
+	}
+	// The source stores dates as strings; the native/client APIs expose milliseconds.
+	if _, err = s.store.DB.Exec(`UPDATE catalog_items SET document=json_set(document,'$.episodes[0].publishedAt','2026-10-23T00:00:00.000Z') WHERE id=?`, id); err != nil {
+		t.Fatal(err)
+	}
+	jsonObject(t, call(t, h, a, "GET", "/api/v1/podcasts/"+id, ""))
+	edited = jsonObject(t, nativeCall(t, h, tok, "GET", "/api/podcasts/"+id+"/episode/"+episode, ""))
+	if nativeNumber(edited["publishedAt"]) <= 0 {
+		t.Fatal("imported date normalization", edited["publishedAt"])
+	}
 	// Retention protects active listeners, then moves only the older download.
 	ctx := context.Background()
 	config := library.PodcastSettings{Keep: 1, Interval: 3600, MaxNew: 3}

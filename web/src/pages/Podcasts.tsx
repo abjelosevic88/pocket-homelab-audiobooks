@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api, V1 } from '../lib/api'
 import { useApp } from '../lib/app-context'
+import {EpisodeEditor} from '../components/EpisodeEditor'
 import {TrashDialog} from '../components/TrashDialog'
 import { ShareDialog } from '../components/ShareDialog'
 import { usePlayer } from '../lib/player'
@@ -17,6 +18,9 @@ export default function Podcasts() {
   const { id } = useParams()
   const {user}=useApp()
   const [sharing,setSharing]=useState<{id:string;title:string}>()
+  const [editing,setEditing]=useState<string>()
+  const [term,setTerm]=useState('')
+  const [results,setResults]=useState<{id:number;title:string;artistName:string;feedUrl:string;itunesPageUrl:string}[]>([])
   const [trashing,setTrashing]=useState<{id:string;title:string}>()
   const [data, setData] = useState<{ items: Show[]; libraries: Library[]; can_subscribe: boolean } | null>(null)
   const [detail, setDetail] = useState<Detail | null>(null)
@@ -45,6 +49,7 @@ export default function Podcasts() {
       {user?.role==='admin' && <button className="btn" onClick={()=>setSharing({id:'',title:detail.item.title})}>Share podcast & RSS</button>}
       {detail.can_delete&&<button className="btn" onClick={()=>setTrashing({id:'',title:detail.item.title})}>Move podcast to trash</button>}
       {trashing&&<TrashDialog id={id} episode={trashing.id} title={trashing.title} onClose={()=>setTrashing(undefined)} onRemoved={()=>{if(p.isCurrent(id))p.stop();setTrashing(undefined);if(!trashing.id)navigate('/trash');else void load()}}/>}
+      {editing&&<EpisodeEditor item={id} id={editing} onClose={()=>setEditing(undefined)} onSaved={()=>{setEditing(undefined);void load()}}/>}
       {sharing && <ShareDialog kind="item" target={id} episode={sharing.id} name={sharing.title} onClose={()=>setSharing(undefined)} />}
       {detail.can_manage && <details><summary>Subscription settings</summary><form className="stack mt" onSubmit={e => { e.preventDefault(); void act(() => api.put(`${V1}/podcasts/${encodeURIComponent(id)}/settings`, settings)) }}>
         <label><input type="checkbox" checked={settings.auto_download} onChange={e => setSettings({ ...settings, auto_download: e.target.checked })} /> Download newly published episodes automatically</label>
@@ -57,7 +62,7 @@ export default function Podcasts() {
       {detail.error && <p className="callout danger">{detail.error}</p>}
       {!detail.episodes.length && <p className="muted">Check the feed to find episodes.</p>}
       {detail.episodes.map(ep => <section className="set-section" key={ep.id}><div className="set-section-body row wrap"><div className="grow"><b>{ep.title}</b><p className="small muted">{ep.publishedAt ? new Date(ep.publishedAt).toLocaleDateString() : ''} {ep.status && ep.status !== 'complete' ? ` · ${ep.status}` : ''}</p>{ep.error && <p className="small danger-text">{ep.error}</p>}</div>
-        {ep.in_trash&&<Link to="/trash">In trash</Link>}{ep.downloaded&&detail.can_delete&&<button className="btn" onClick={()=>setTrashing({id:ep.id,title:ep.title})}>Move episode to trash</button>}
+        {detail.can_manage&&<button className="btn" onClick={()=>setEditing(ep.id)}>Edit episode</button>}{ep.in_trash&&<Link to="/trash">In trash</Link>}{ep.downloaded&&detail.can_delete&&<button className="btn" onClick={()=>setTrashing({id:ep.id,title:ep.title})}>Move episode to trash</button>}
         {ep.downloaded && user?.role==='admin' && <button className="btn" onClick={()=>setSharing({id:ep.id,title:ep.title})}>Share episode</button>}
         {ep.downloaded ? <button type="button" className="btn primary" disabled={busy} onClick={() => act(async () => { const { book } = await api.get<{ book: Book }>(`${V1}/podcasts/${encodeURIComponent(id)}/episodes/${encodeURIComponent(ep.id)}`); p.play(book) })}>Play episode</button> : detail.can_manage && (ep.status === 'queued' || ep.status === 'running' ? <button type="button" className="btn" disabled={busy} onClick={() => act(() => api.del(`${V1}/podcasts/jobs/${encodeURIComponent(ep.job_id!)}`))}>Cancel download</button> : <button type="button" className="btn" disabled={busy} onClick={() => act(() => api.post(`${V1}/podcasts/${encodeURIComponent(id)}/episodes/${encodeURIComponent(ep.id)}/download`, {}))}>Download episode</button>)}
       </div></section>)}
@@ -69,6 +74,8 @@ export default function Podcasts() {
       {!data.libraries.length ? <p>Add a podcast library in <Link to="/settings/audiobookshelf">Libraries settings</Link>.</p> : <>
         <label>Podcast library<select value={library} onChange={e => { setLibrary(e.target.value); setFolder(data.libraries.find(l => l.id === e.target.value)?.folders[0]?.id || '') }}>{data.libraries.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}</select></label>
         <label>Folder<select value={folder} onChange={e => setFolder(e.target.value)}>{data.libraries.find(l => l.id === library)?.folders.map(f => <option key={f.id} value={f.id}>{f.fullPath || f.path || f.id}</option>)}</select></label>
+        <form className="row wrap" onSubmit={e=>{e.preventDefault();void act(async()=>setResults(await api.get(`${V1}/podcasts/search?term=${encodeURIComponent(term)}`)))}}><label className="grow">Search Apple Podcasts<input value={term} minLength={2} required onChange={e=>setTerm(e.target.value)}/></label><button className="btn" disabled={busy}>Search podcasts</button></form>
+        {results.map(r=><div className="card side-card stack" key={r.id}><b>{r.title}</b><p>{r.artistName}</p><div className="row wrap">{r.itunesPageUrl&&<a href={r.itunesPageUrl} target="_blank" rel="noreferrer" className="btn">View on Apple Podcasts</a>}<button className="btn" disabled={busy||!folder} onClick={()=>act(async()=>{const v=await subscribe(r.feedUrl);navigate(`/podcasts/${v.id}`)})}>Subscribe to {r.title}</button></div></div>)}
         <form className="row wrap" onSubmit={e => { e.preventDefault(); void act(async () => { const result = await subscribe(url); navigate(`/podcasts/${result.id}`) }) }}><label className="grow">RSS or Atom feed URL<input type="url" required value={url} onChange={e => setURL(e.target.value)} /></label><button className="btn primary" disabled={busy || !folder}>Subscribe</button></form>
         <label>Import OPML<input type="file" accept=".opml,.xml,text/xml" disabled={busy} onChange={e => { const file = e.target.files?.[0]; if (!file) return; void act(async () => { if (file.size > 1024 * 1024) throw new Error('Use an OPML file under 1 MiB'); const result = await api.post<{ subscriptions: typeof imports }>(`${V1}/podcasts/opml`, { opml: await file.text() }); setImports(result.subscriptions) }) }} /></label>
         {imports.length > 0 && <><p>{imports.length} subscriptions in this file.</p><button type="button" className="btn" disabled={busy || !folder} onClick={() => act(async () => { for (let i = 0; i < imports.length; i++) { if (imports[i].status === 'Imported') continue; let status = 'Imported'; try { await subscribe(imports[i].url) } catch (e) { status = errMsg(e) }; setImports(list => list.map((s, j) => j === i ? { ...s, status } : s)) } })}>Import subscriptions</button>{imports.map((s, i) => <p className="small" key={i}>{s.title || s.url} · {s.status || 'Ready'}</p>)}</>}

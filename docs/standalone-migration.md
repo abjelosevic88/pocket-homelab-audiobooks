@@ -115,7 +115,7 @@ as a standalone implementation.
 | Clients | Native Pocket app API, third-party login, refresh, token streams, Socket.IO | Pending |
 | Organisation | Collections, personal playlists, bulk add/remove/reorder | Imported associations, CRUD, ordered batch changes and private ownership verified in API/store tests; create/edit verified in the browser |
 | Ebooks | Serving/reading contract, reading progress, companion books, sending to ereaders | EPUB/PDF web reading, chapter navigation, text size, EPUB CFI/PDF page resume, separate companion positions, optimistic conflict checks, durable browser saves and original-file client downloads implemented. Browser EPUB/PDF save/reload verified. Ereader delivery and remaining formats/tools pending |
-| Podcasts | Feeds/OPML, discovery, episode checks/downloads, scheduling and retention | RSS/Atom subscriptions, OPML import/export, checks, scheduled new-episode downloads, persistent/cancellable jobs, validation, missing-file repair and web/client playback implemented. Browser subscribe/download/play/save/reload verified. Recoverable keep-latest retention and episode/show deletion implemented; discovery, episode editing and full compatibility endpoints pending |
+| Podcasts | Feeds/OPML, discovery, episode checks/downloads, scheduling and retention | RSS/Atom subscriptions, OPML import/export, checks, scheduled new-episode downloads, persistent/cancellable jobs, validation, missing-file repair and web/client playback implemented. Browser subscribe/download/play/save/reload verified. Recoverable keep-latest retention, episode/show deletion, Apple Podcasts search and persistent episode metadata/chapter editing implemented. Client feed preview, creation, OPML parsing, checks, search, queue and episode read/edit/delete routes implemented; bulk import/matching and remaining library compatibility routes pending |
 | Sharing | RSS for books/series/collections, media shares, passwords/expiry/download permissions | Native RSS and share pages for books, series, collections and podcast episodes; password grants, expiry/revocation, current publisher permissions, per-episode media boundaries, original downloads and HLS fallback implemented. Browser create/play/resume/RSS/revoke and protocol isolation tests pass; source snapshot has no published feeds |
 | Accounts | Local/SSO authentication, per-user isolation, permissions, API-key lifecycle | Admin mapping/grants, library/tag/explicit permissions, locking, stale-update rejection and account ownership verified; full migration pending |
 | Tools | Metadata embedding, M4B conversion, jobs, cancellation, status | Pending |
@@ -303,3 +303,22 @@ Trash consumes disk until purged, including episodes removed by retention.
 Synthetic tests verify permissions, stale revisions, partial-move recovery,
 restore collisions, changed-file refusal, purge, scanner tombstones, active-session
 retention protection and redownload identity. Real media is not used in deletion tests.
+
+## Podcast editing and client contracts
+
+Episode edits have optimistic revisions and separate override records, so a feed
+refresh preserves corrected titles, descriptions, numbering, dates, chapters and
+enclosure URLs. Downloaded media, episode IDs and listening positions are retained.
+Text edits strip active HTML. Playback never follows an edited URL directly;
+downloads use the same vetted network transport, size limits and media validation.
+
+Apple Podcasts discovery uses the documented [iTunes Search API](https://developer.apple.com/library/archive/documentation/AudioVideo/Conceptual/iTuneSearchAPI/),
+with explicit-content filtering, bounded responses and a direct RSS URL fallback.
+The UI links to the directory listing and does not embed promotional previews or artwork.
+
+Native client routes now handle podcast feed previews, creation, OPML parsing,
+episode searches/checks, download queues/cancellation and episode read/edit/delete.
+Unsupported operations still return an explicit error. Imported date strings are
+normalized to client milliseconds. The owner-only snapshot rehearsal verifies all
+11 shows and 77 episode records without running downloads or modifying media.
+Browser checks cover episode edit, feed refresh and recoverable deletion/restore.

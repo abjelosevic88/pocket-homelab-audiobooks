@@ -77,6 +77,14 @@ func (s *Server) nativeAPI(w http.ResponseWriter, r *http.Request, uid int64) {
 		s.nativeShareCompat(w, r, uid)
 		return
 	}
+	if path == "/api/search/podcast" && read {
+		s.nativePodcastSearch(w, r, uid)
+		return
+	}
+	if path == "/api/podcasts" || strings.HasPrefix(path, "/api/podcasts/") {
+		s.nativePodcastCompat(w, r, uid)
+		return
+	}
 	if path == "/api/upload" && method == "POST" {
 		s.nativeUpload(w, r, uid)
 		return

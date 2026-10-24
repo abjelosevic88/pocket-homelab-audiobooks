@@ -175,6 +175,33 @@ func (s *Server) nativeItem(ctx context.Context, uid int64, id string) (nativeOb
 	}
 	meta["narratorName"] = strings.Join(narrators, ", ")
 	media := nativeObject{"id": it.MediaID, "metadata": meta, "coverPath": m["coverPath"], "tags": it.Tags, "duration": it.Duration, "chapters": nativeArray(m["chapters"]), "audioFiles": nativeArray(m["audioFiles"]), "ebookFile": m["ebookFile"], "episodes": nativeArray(doc["episodes"])}
+	if it.MediaType == "podcast" {
+		files, e := s.catalog().Files(ctx, uid, it.ID)
+		if e != nil {
+			return nil, e
+		}
+		available := map[string]bool{}
+		for _, f := range files {
+			available[f.ID] = true
+		}
+		episodes := []any{}
+		duration := 0.0
+		for _, v := range nativeArray(doc["episodes"]) {
+			ep := nativeMap(v)
+			if !available[nativeString(nativeMap(ep["audioFile"])["ino"])] {
+				continue
+			}
+			ep = episodeCompat(ep)
+			ep["libraryItemId"] = it.ID
+			episodes = append(episodes, ep)
+			duration += nativeNumber(nativeMap(ep["audioFile"])["duration"])
+		}
+		media["episodes"] = episodes
+		media["numEpisodes"] = len(episodes)
+		media["duration"] = duration
+		meta["feedUrl"] = m["feedURL"]
+		meta["imageUrl"] = m["imageURL"]
+	}
 	media["numAudioFiles"], media["numTracks"], media["numChapters"] = len(nativeArray(m["audioFiles"])), len(nativeArray(m["audioFiles"])), len(nativeArray(m["chapters"]))
 	return nativeObject{"id": it.ID, "libraryId": it.LibraryID, "mediaType": it.MediaType, "addedAt": it.AddedAt, "updatedAt": it.UpdatedAt, "isMissing": it.Missing, "isInvalid": false, "media": media, "libraryFiles": nativeMap(doc["item"])["libraryFiles"]}, nil
 }

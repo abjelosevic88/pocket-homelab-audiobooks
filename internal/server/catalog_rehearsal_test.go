@@ -102,6 +102,28 @@ func TestNativeCatalogSnapshotRehearsal(t *testing.T) {
 			t.Fatal("library count mismatch")
 		}
 	}
+
+	podcasts, e := s.catalog().Items(ctx, uid, library.Query{MediaType: "podcast", Limit: 1000})
+	if e != nil {
+		t.Fatal(e)
+	}
+	episodeCount := 0
+	for _, pod := range podcasts.Items {
+		eps, e := s.catalog().PodcastEpisodes(ctx, uid, pod.ID)
+		if e != nil {
+			t.Fatalf("imported podcast episode list: %v", e)
+		}
+		episodeCount += len(eps)
+		if w := get("/api/v1/podcasts/"+pod.ID, ""); w.Code != 200 {
+			t.Fatalf("imported podcast HTTP %d %s", w.Code, w.Body.String())
+		}
+		for _, ep := range eps {
+			if _, _, e = s.catalog().EpisodeDocument(ctx, uid, pod.ID, ep.ID); e != nil {
+				t.Fatal(e)
+			}
+		}
+	}
+	t.Logf("Imported podcasts verified read-only: %d shows, %d episodes", len(podcasts.Items), episodeCount)
 	type sample struct{ item, file, mime string }
 	samples := []sample{}
 	rows, err := st.DB.Query(`SELECT item_id,id,mime FROM catalog_files WHERE role='audio' AND excluded=0 ORDER BY mime,item_id,track_index`)

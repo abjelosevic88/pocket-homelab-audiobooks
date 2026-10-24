@@ -77,6 +77,10 @@ func (s *Server) nativePodcasts(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, nativeObject{"items": page.Items, "total": page.Total, "libraries": libs, "can_subscribe": a.Permissions.Upload && a.Permissions.Update && a.Permissions.AllTags})
 		return
 	}
+	if path == "search" && r.Method == "GET" {
+		s.nativePodcastSearch(w, r, uid)
+		return
+	}
 	if path == "subscribe" && r.Method == "POST" {
 		var in library.PodcastOptions
 		if err := decode(r, &in); err != nil {
@@ -218,6 +222,30 @@ func (s *Server) nativePodcasts(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, nativeObject{"ok": true})
 		return
 	}
+	if len(tail) == 4 && tail[1] == "episodes" && tail[3] == "editor" {
+		if r.Method == "GET" {
+			ep, rev, e := c.EpisodeDocument(ctx, uid, id, tail[2])
+			if e != nil {
+				s.nativeError(w, e)
+				return
+			}
+			writeJSON(w, 200, nativeObject{"episode": ep, "revision": rev})
+			return
+		}
+		if r.Method == "PUT" {
+			var in library.EpisodeEdit
+			if decode(r, &in) != nil {
+				writeErr(w, 400, "invalid episode edit")
+				return
+			}
+			if e := c.EditEpisode(ctx, uid, id, tail[2], in); e != nil {
+				s.nativeError(w, e)
+				return
+			}
+			writeJSON(w, 200, nativeObject{"ok": true})
+			return
+		}
+	}
 	if len(tail) == 3 && tail[1] == "episodes" && r.Method == "GET" {
 		b, err := s.nativeEpisodeBook(ctx, uid, id, tail[2])
 		if err != nil {
@@ -331,11 +359,11 @@ func (s *Server) downloadPodcastEpisode(ctx context.Context, uid int64, item, ep
 	if err := s.catalog().CanManagePodcast(ctx, uid, item); err != nil {
 		return err
 	}
-	var raw string
-	if err := s.store.DB.QueryRowContext(ctx, `SELECT enclosure_url FROM catalog_podcast_feed_episodes WHERE item_id=? AND episode_id=?`, item, episode).Scan(&raw); err != nil {
+	doc, _, err := s.catalog().EpisodeDocument(ctx, uid, item, episode)
+	if err != nil {
 		return err
 	}
-	u, err := fetch.URL(raw)
+	u, err := fetch.URL(nativeString(doc["enclosureURL"]))
 	if err != nil {
 		return err
 	}
