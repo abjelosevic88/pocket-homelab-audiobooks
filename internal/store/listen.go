@@ -212,6 +212,12 @@ func (s *Store) DeleteListen(ctx context.Context, uid, id int64) error {
 	return nil
 }
 
+// DeleteListenABS removes the row of an Audiobookshelf session (when it turns out not to be a book).
+func (s *Store) DeleteListenABS(ctx context.Context, uid int64, absID string) error {
+	_, err := s.DB.ExecContext(ctx, `DELETE FROM listens WHERE user_id = ? AND abs_id = ?`, uid, absID)
+	return err
+}
+
 // LastListens returns the newest session of each book a person heard, newest first.
 func (s *Store) LastListens(ctx context.Context, uid int64, limit int) ([]Listen, error) {
 	rows, err := s.DB.QueryContext(ctx, `SELECT `+listenCols+` FROM listens l WHERE user_id = ? AND id = (SELECT id FROM listens x WHERE x.user_id = l.user_id AND x.item_id = l.item_id ORDER BY updated_at DESC LIMIT 1)

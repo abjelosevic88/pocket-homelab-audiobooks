@@ -109,7 +109,10 @@ func newFakeABS(t *testing.T) (*httptest.Server, *fakeABS) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"total": 1, "numPages": 1, "page": 0, "itemsPerPage": 100, "sessions": []map[string]any{{
 			"id": "old-" + f.key(r), "libraryItemId": bookID, "mediaType": "book", "displayTitle": "The Hobbit", "displayAuthor": "J.R.R. Tolkien",
 			"duration": 3600, "timeListening": 1200, "startTime": 0, "currentTime": 1200, "startedAt": now - 3_600_000, "updatedAt": now - 3_000_000,
-			"deviceInfo": map[string]any{"clientName": "Abs Android", "deviceName": "Pixel"}, "mediaMetadata": map[string]any{"title": "The Hobbit", "authorName": "J.R.R. Tolkien"}}}})
+			"deviceInfo": map[string]any{"clientName": "Abs Android", "deviceName": "Pixel"}, "mediaMetadata": map[string]any{"title": "The Hobbit", "authorName": "J.R.R. Tolkien"}},
+			// Audra reports a podcast episode as a "book" without a library: not a book here
+			{"id": "pod-" + f.key(r), "libraryItemId": "li-podcast", "mediaType": "book", "displayTitle": "A YouTube video", "duration": 600, "timeListening": 300,
+				"startedAt": now - 3_600_000, "updatedAt": now - 3_500_000}}})
 	})
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)

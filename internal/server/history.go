@@ -95,6 +95,34 @@ func (s *Server) syncUser(ctx context.Context, uid int64, full bool) error {
 	first := !st.Backfilled
 	newest := st.Watermark
 	var added int
+	// only books: some apps (Audra) report podcast episodes as "book" sessions
+	// without a library, so the item's library decides
+	bookLib := map[string]bool{}
+	if libs, err := ac.c.Libraries(ctx); err == nil {
+		for _, l := range libs {
+			if l.MediaType == "book" {
+				bookLib[l.ID] = true
+			}
+		}
+	}
+	itemLib := map[string]string{}
+	isBook := func(ls *abs.Session) bool {
+		if ls.MediaType != "book" || ls.EpisodeID != "" || ls.LibraryItemID == "" {
+			return false
+		}
+		lib := ls.LibraryID
+		if lib == "" {
+			l, ok := itemLib[ls.LibraryItemID]
+			if !ok {
+				if it, err := ac.c.Item(ctx, ls.LibraryItemID); err == nil && it.MediaType == "book" {
+					l = it.LibraryID
+				}
+				itemLib[ls.LibraryItemID] = l
+			}
+			lib = l
+		}
+		return len(bookLib) == 0 || bookLib[lib]
+	}
 	const per = 100
 	for page := 0; ; page++ {
 		p, err := ac.c.ListeningSessions(ctx, page, per)
@@ -113,10 +141,17 @@ func (s *Server) syncUser(ctx context.Context, uid int64, full bool) error {
 			if ls.UpdatedAt > newest {
 				newest = ls.UpdatedAt
 			}
-			if ls.MediaType != "book" || ls.LibraryItemID == "" || ls.TimeListening < 1 {
+			if !isBook(&ls) {
+				_ = s.store.DeleteListenABS(ctx, uid, ls.ID) // let in by an earlier version
+				continue
+			}
+			if ls.TimeListening < 1 {
 				continue
 			}
 			l := listenOf(&ls)
+			if l.LibraryID == "" {
+				l.LibraryID = itemLib[ls.LibraryItemID]
+			}
 			if ok, err := s.store.UpsertListen(ctx, uid, &l); err == nil && ok {
 				added++
 			}
@@ -301,6 +336,7 @@ type dayBook struct {
 	Author   string `json:"author"`
 	Cover    string `json:"cover"`
 	Seconds  int    `json:"seconds"`
+	Duration int    `json:"duration"` // the book's length
 	From     int    `json:"from"`
 	To       int    `json:"to"`
 	First    string `json:"first"`
@@ -336,7 +372,7 @@ func (s *Server) handleDay(w http.ResponseWriter, r *http.Request) {
 		sec += l.Seconds
 		b := by[l.ItemID]
 		if b == nil {
-			b = &dayBook{ItemID: l.ItemID, Title: l.Title, Author: l.Author, Cover: "/api/v1/cover/" + l.ItemID, From: l.StartPos, First: l.StartedAt, Finished: done[l.ItemID]}
+			b = &dayBook{ItemID: l.ItemID, Title: l.Title, Author: l.Author, Cover: "/api/v1/cover/" + l.ItemID, Duration: l.Duration, From: l.StartPos, First: l.StartedAt, Finished: done[l.ItemID]}
 			by[l.ItemID] = b
 			order = append(order, l.ItemID)
 		}

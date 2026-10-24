@@ -327,6 +327,12 @@ func (s *Server) handleNowPlaying(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, out)
 		return
 	}
+	if ls.LibraryID == "" { // some apps report podcast episodes as books without a library
+		if it, err := ac.c.Item(ctx, ls.LibraryItemID); err != nil || it.MediaType != "book" {
+			writeJSON(w, http.StatusOK, out)
+			return
+		}
+	}
 	s.playMu.Lock()
 	_, ours := s.plays[ls.ID]
 	s.playMu.Unlock()
