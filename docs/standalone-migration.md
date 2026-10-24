@@ -102,7 +102,7 @@ as a standalone implementation.
 | Browse | Search, filters, sorts, pagination, shelves, series and authors | Pending |
 | Playback | Direct/range streaming, multi-file timeline, transcoding/HLS, seeking | Direct/multi-file playback and local seekable FFmpeg/HLS verified |
 | Personal state | Progress, bookmarks, completion, hidden items, history, statistics | Native writes, retries, resume/finish and isolation verified |
-| Device sync | Sessions, handoff, retries, offline reports, conflicts, live updates | Native engine and web outbox verified; legacy delta-only clients need stable report IDs for exact retry accounting |
+| Device sync | Sessions, handoff, retries, offline reports, conflicts, live updates | Native engine, web outbox and cumulative offline session uploads verified, including concurrent/reordered retries, imported-session reconciliation and newer-position protection; legacy online delta-only clients need stable report IDs for exact retry accounting |
 | Clients | Native Pocket app API, third-party login, refresh, token streams, Socket.IO | Pending |
 | Organisation | Collections, personal playlists, bulk add/remove/reorder | Imported associations, CRUD, ordered batch changes and private ownership verified in API/store tests; create/edit verified in the browser |
 | Ebooks | Serving/reading contract, reading progress, companion books, sending to ereaders | Pending |

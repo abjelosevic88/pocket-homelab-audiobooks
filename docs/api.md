@@ -187,3 +187,9 @@ The web app uses equivalent authenticated `/api/v1/organize/*` routes.
 `GET|HEAD /api/items/{id}/download` and
 `GET|HEAD /api/v1/catalog/items/{id}/download` return a streamed ZIP of original
 files, with download permission enforced independently from playback.
+
+Native `/api/session/local` and `/api/session/local-all` accept cumulative offline
+listening sessions. Session IDs are scoped to the authenticated person; retries
+and reordered totals do not add listening twice. Old offline uploads cannot
+replace a newer online position or manual progress edit. Imported sessions are
+reconciled transactionally, retaining their original record as audit data.

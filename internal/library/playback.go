@@ -213,9 +213,10 @@ type Report struct {
 	Ended      bool    `json:"ended"`
 }
 type ReportResult struct {
-	Duplicate       bool `json:"duplicate"`
-	ProgressApplied bool `json:"progress_applied"`
-	FinishedNow     bool `json:"finished_now"`
+	SessionID       string `json:"session_id,omitempty"`
+	Duplicate       bool   `json:"duplicate"`
+	ProgressApplied bool   `json:"progress_applied"`
+	FinishedNow     bool   `json:"finished_now"`
 }
 
 // ReportSession commits its receipt, session, progress, daily history and finish
@@ -237,8 +238,6 @@ func (c *Catalog) ReportSession(ctx context.Context, uid int64, id string, r Rep
 	if r.Position > session.Duration+1 {
 		return out, ErrInvalid
 	}
-	fingerprint := sha256.Sum256([]byte(id + raw(r)))
-	hash := hex.EncodeToString(fingerprint[:])
 	tx, err := c.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return out, err
@@ -249,6 +248,19 @@ func (c *Catalog) ReportSession(ctx context.Context, uid int64, id string, r Rep
 	if err != nil {
 		return out, err
 	}
+	out, err = reportSessionTx(ctx, tx, uid, it, session, r)
+	if err != nil {
+		return out, err
+	}
+	return out, tx.Commit()
+}
+
+func reportSessionTx(ctx context.Context, tx *sql.Tx, uid int64, it Item, session Session, r Report) (ReportResult, error) {
+	out := ReportResult{SessionID: session.ID}
+	id := session.ID
+	fingerprint := sha256.Sum256([]byte(id + raw(r)))
+	hash := hex.EncodeToString(fingerprint[:])
+	var err error
 	var old string
 	err = tx.QueryRowContext(ctx, `SELECT fingerprint FROM catalog_play_reports WHERE account_id=? AND id=?`, session.AccountID, r.ID).Scan(&old)
 	if err == nil {
@@ -266,11 +278,20 @@ func (c *Catalog) ReportSession(ctx context.Context, uid int64, id string, r Rep
 		return out, err
 	}
 	var generation int64
-	if err = tx.QueryRowContext(ctx, `SELECT generation FROM catalog_play_heads WHERE account_id=? AND item_id=? AND episode_id=?`, session.AccountID, session.ItemID, session.EpisodeID).Scan(&generation); err != nil {
+	if err = tx.QueryRowContext(ctx, `SELECT generation FROM catalog_play_heads WHERE account_id=? AND item_id=? AND episode_id=?`, session.AccountID, session.ItemID, session.EpisodeID).Scan(&generation); err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return out, err
 	}
 	newer := r.ObservedAt > session.ObservedAt
 	latest := generation == session.Generation
+	if session.Generation < 0 {
+		// Offline reports can be newer than the last online session, but an old
+		// upload must not steal the position of a device that started later.
+		var onlineStart int64
+		if err = tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(started_at),0) FROM catalog_play_sessions WHERE account_id=? AND item_id=? AND episode_id=? AND generation>=0`, session.AccountID, session.ItemID, session.EpisodeID).Scan(&onlineStart); err != nil {
+			return out, err
+		}
+		latest = r.ObservedAt >= onlineStart
+	}
 	if newer {
 		session.Position = math.Min(r.Position, session.Duration)
 		session.ObservedAt = r.ObservedAt
@@ -281,6 +302,9 @@ func (c *Catalog) ReportSession(ctx context.Context, uid int64, id string, r Rep
 		session.Playing = r.Playing && !session.Closed
 	}
 	session.UpdatedAt = now.UnixMilli()
+	if session.Generation < 0 {
+		session.UpdatedAt = session.ObservedAt
+	}
 	_, err = tx.ExecContext(ctx, `UPDATE catalog_play_sessions SET updated_at=?,position=?,listened=?,playing=?,closed=?,last_observed_at=? WHERE id=?`, session.UpdatedAt, session.Position, session.Listened, session.Playing, session.Closed, session.ObservedAt, id)
 	if err != nil {
 		return out, err
@@ -368,7 +392,7 @@ func (c *Catalog) ReportSession(ctx context.Context, uid int64, id string, r Rep
 			until = begin
 		}
 	}
-	return out, tx.Commit()
+	return out, nil
 }
 func objectJSON(s string) sourceRow {
 	out := sourceRow{}

@@ -94,6 +94,10 @@ func (s *Server) nativeAPI(w http.ResponseWriter, r *http.Request, uid int64) {
 		respond(nativeObject{"user": me, "userDefaultLibraryId": first, "serverSettings": nativeObject{"authActiveAuthMethods": []string{"local"}}, "Source": "Pocket Audiobooks native"})
 		return
 	}
+	if method == "POST" && (path == "/api/session/local" || path == "/api/session/local-all") {
+		s.nativeOffline(w, r, uid, path == "/api/session/local-all")
+		return
+	}
 	if len(parts) >= 2 && parts[0] == "api" && (parts[1] == "collections" || parts[1] == "playlists") {
 		s.nativeListAPI(w, r, uid, parts[1], parts[2:])
 		return
