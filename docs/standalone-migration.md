@@ -106,7 +106,7 @@ as a standalone implementation.
 | Clients | Native Pocket app API, third-party login, refresh, token streams, Socket.IO | Pending |
 | Organisation | Collections, personal playlists, bulk add/remove/reorder | Imported associations, CRUD, ordered batch changes and private ownership verified in API/store tests; create/edit verified in the browser |
 | Ebooks | Serving/reading contract, reading progress, companion books, sending to ereaders | Pending |
-| Podcasts | Feeds/OPML, discovery, episode checks/downloads, scheduling and retention | Pending |
+| Podcasts | Feeds/OPML, discovery, episode checks/downloads, scheduling and retention | RSS/Atom subscriptions, OPML import/export, checks, scheduled new-episode downloads, persistent/cancellable jobs, validation, missing-file repair and web/client playback implemented. Browser subscribe/download/play/save/reload verified. Discovery, retention, editing/deletion and full compatibility endpoints pending |
 | Sharing | RSS for books/series/collections, media shares, passwords/expiry/download permissions | Pending |
 | Accounts | Local/SSO authentication, per-user isolation, permissions, API-key lifecycle | Admin mapping/grants, library/tag/explicit permissions, locking, stale-update rejection and account ownership verified; full migration pending |
 | Tools | Metadata embedding, M4B conversion, jobs, cancellation, status | Pending |

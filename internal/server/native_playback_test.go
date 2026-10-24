@@ -247,7 +247,25 @@ func TestNativeBrowserAcceptance(t *testing.T) {
 	if _, err = s.store.DB.Exec(`INSERT INTO catalog_entities VALUES('libraryFolders','folder','lib','{"id":"folder","path":"/media"}')`); err != nil {
 		t.Fatal(err)
 	}
+	podRoot := t.TempDir()
+	if _, err = s.store.DB.Exec(`INSERT INTO catalog_roots VALUES('podroot','/podcasts',?)`, podRoot); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.store.DB.Exec(`INSERT INTO catalog_libraries VALUES('pods','Test podcasts','podcast',1,'{}');INSERT INTO catalog_entities VALUES('libraryFolders','podfolder','pods','{"id":"podfolder","path":"/podcasts"}')`); err != nil {
+		t.Fatal(err)
+	}
 	s.nativeFetchHTTP = &http.Client{Transport: gatewayTransport(func(r *http.Request) (*http.Response, error) {
+		if r.URL.Host == "podcast.test" {
+			data := []byte(`<rss><channel><title>Browser podcast</title><item><guid>one</guid><title>Browser episode</title><enclosure url="http://podcast.test/audio.mp3" type="audio/mpeg"/></item></channel></rss>`)
+			if r.URL.Path == "/audio.mp3" {
+				var e error
+				data, e = os.ReadFile(filepath.Join(root, "Test Book", "part1.mp3"))
+				if e != nil {
+					return nil, e
+				}
+			}
+			return &http.Response{StatusCode: 200, Header: make(http.Header), ContentLength: int64(len(data)), Body: io.NopCloser(strings.NewReader(string(data)))}, nil
+		}
 		if r.URL.Host != "openlibrary.org" {
 			return nil, fmt.Errorf("unexpected metadata host")
 		}
@@ -257,6 +275,9 @@ func TestNativeBrowserAcceptance(t *testing.T) {
 		}
 		return &http.Response{StatusCode: 200, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(body))}, nil
 	})}
+	podCtx, cancelPodcasts := context.WithCancel(context.Background())
+	defer cancelPodcasts()
+	go s.nativePodcastLoop(podCtx)
 	s.webFS, err = fs.Sub(web.Dist, "dist")
 	if err != nil {
 		t.Fatal(err)

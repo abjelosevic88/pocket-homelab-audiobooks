@@ -20,6 +20,7 @@ type Ref struct {
 
 // Book is what the web app gets for one audiobook, with the person's progress.
 type Book struct {
+	EpisodeID   string   `json:"episode_id,omitempty"`
 	ID          string   `json:"id"`
 	LibraryID   string   `json:"library_id"`
 	Title       string   `json:"title"`

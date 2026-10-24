@@ -6,6 +6,7 @@ export interface Chapter { id: number; start: number; end: number; title: string
 
 /** An audiobook in Audiobookshelf, with the person's progress. */
 export interface Book {
+  episode_id?: string
   id: string; library_id: string; title: string; subtitle?: string; author: string; narrator?: string; series?: string; sequence?: string
   authors?: Ref[]; series_list?: Ref[]; genres: string[]; year?: string; duration: number; cover?: string; added_at: number; chapters: number; missing?: boolean
   progress: number; current_time: number; finished: boolean; last_played?: number; finished_at?: number
@@ -47,7 +48,7 @@ export interface Day { date: string; seconds: number; books: DayBook[]; finished
 export interface PlayTrack { url: string; start: number; duration: number; mime: string }
 export interface PlayInfo { server_time?: number; backend?: 'native' | 'audiobookshelf'; session_id: string; method: 'direct' | 'hls'; tracks: PlayTrack[]; current_time: number; duration: number; chapters: Chapter[]; book: Book; speed: number }
 export interface NowPlaying {
-  active: boolean; playing?: boolean; item_id?: string; title?: string; author?: string; cover?: string; position?: number; duration?: number
+  active: boolean; playing?: boolean; item_id?: string; episode_id?: string; title?: string; author?: string; cover?: string; position?: number; duration?: number
   device?: string; app?: string; updated_at?: number; server_time: number
 }
 

@@ -724,6 +724,7 @@ type Session struct {
 
 // PlayOptions say what the browser can play.
 type PlayOptions struct {
+	EpisodeID          string     `json:"-"`
 	DeviceInfo         DeviceInfo `json:"deviceInfo"`
 	ForceDirectPlay    bool       `json:"forceDirectPlay"`
 	ForceTranscode     bool       `json:"forceTranscode"`
@@ -734,7 +735,11 @@ type PlayOptions struct {
 // Play opens a playback session for a book, starting at the account's position.
 func (c *Client) Play(ctx context.Context, itemID string, o PlayOptions) (*Session, error) {
 	var s Session
-	return &s, c.call(ctx, http.MethodPost, "/api/items/"+url.PathEscape(itemID)+"/play", nil, o, &s)
+	path := "/api/items/" + url.PathEscape(itemID) + "/play"
+	if o.EpisodeID != "" {
+		path += "/" + url.PathEscape(o.EpisodeID)
+	}
+	return &s, c.call(ctx, http.MethodPost, path, nil, o, &s)
 }
 
 // SyncData is what a player reports.

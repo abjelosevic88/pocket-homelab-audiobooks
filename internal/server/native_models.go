@@ -248,7 +248,18 @@ func nativeMetadata(it nativeObject) nativeObject {
 	return nativeMap(nativeMap(it["media"])["metadata"])
 }
 func nativeSessionWire(sess library.Session, it nativeObject) nativeObject {
-	return nativeObject{"libraryItem": it, "id": sess.ID, "userId": sess.AccountID, "libraryItemId": sess.ItemID, "episodeId": sess.EpisodeID, "libraryId": it["libraryId"], "mediaType": it["mediaType"], "displayTitle": nativeMetadata(it)["title"], "displayAuthor": nativeMetadata(it)["authorName"], "duration": sess.Duration, "currentTime": sess.Position, "startTime": sess.StartPosition, "timeListening": sess.Listened, "startedAt": sess.StartedAt, "updatedAt": sess.UpdatedAt, "audioTracks": sess.Tracks, "chapters": sess.Chapters, "playMethod": 0, "mediaPlayer": "pocket-audiobooks-native", "mediaMetadata": nativeMetadata(it), "deviceInfo": nativeObject{"deviceId": sess.Client, "deviceName": sess.Device, "clientName": "Pocket Audiobooks"}, "date": time.UnixMilli(sess.StartedAt).In(time.Local).Format("2006-01-02"), "playing": sess.Playing, "closed": sess.Closed}
+	title := nativeMetadata(it)["title"]
+	if sess.EpisodeID != "" {
+		for _, v := range nativeArray(nativeMap(it["media"])["episodes"]) {
+			e := nativeMap(v)
+			if nativeString(e["id"]) == sess.EpisodeID {
+				title = e["title"]
+				break
+			}
+		}
+	}
+
+	return nativeObject{"libraryItem": it, "id": sess.ID, "userId": sess.AccountID, "libraryItemId": sess.ItemID, "episodeId": sess.EpisodeID, "libraryId": it["libraryId"], "mediaType": it["mediaType"], "displayTitle": title, "displayAuthor": nativeMetadata(it)["authorName"], "duration": sess.Duration, "currentTime": sess.Position, "startTime": sess.StartPosition, "timeListening": sess.Listened, "startedAt": sess.StartedAt, "updatedAt": sess.UpdatedAt, "audioTracks": sess.Tracks, "chapters": sess.Chapters, "playMethod": 0, "mediaPlayer": "pocket-audiobooks-native", "mediaMetadata": nativeMetadata(it), "deviceInfo": nativeObject{"deviceId": sess.Client, "deviceName": sess.Device, "clientName": "Pocket Audiobooks"}, "date": time.UnixMilli(sess.StartedAt).In(time.Local).Format("2006-01-02"), "playing": sess.Playing, "closed": sess.Closed}
 }
 func (s *Server) nativeHistory(ctx context.Context, uid int64) error {
 	// Import the old book sessions into the existing integration/history tables.

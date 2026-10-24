@@ -163,7 +163,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
   // ---- playing a book ----
   const play = useCallback(async (b: Book, opts: { at?: number; transcode?: boolean } = {}) => {
-    const same = cur.current?.book.id === b.id
+    const same = cur.current?.book.id === b.id && cur.current?.book.episode_id === b.episode_id
     if (same && !opts.transcode && opts.at === undefined) { audio.play().catch(() => {}); return }
     if (same && !opts.transcode && opts.at !== undefined) { seekTo(opts.at); audio.play().catch(() => {}); return }
     if (cur.current && !opts.transcode) { await report({ close: true, force: true }); audio.pause() }
@@ -173,7 +173,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     applyMediaSession(b)
     try {
       if (user) await flushReports(user.id, () => owner.current === user.id)
-      const info = await api.post<PlayInfo>(`${V1}/play/${encodeURIComponent(b.id)}`, { mime_types: playableTypes(), client: CLIENT_ID, device: deviceName(), force_transcode: !!opts.transcode })
+      const info = await api.post<PlayInfo>(`${V1}/play/${encodeURIComponent(b.id)}`, { episode_id: b.episode_id, mime_types: playableTypes(), client: CLIENT_ID, device: deviceName(), force_transcode: !!opts.transcode })
       if (!user || owner.current !== user.id) return
       if (info.server_time) reportClock.current = { server: info.server_time, monotonic: performance.now(), last: 0 }
       const loaded: Loaded = { owner: user.id, native: info.backend === 'native', book: info.book, session: info.session_id, method: info.method, tracks: info.tracks, chapters: info.chapters || [], duration: info.duration }
@@ -181,7 +181,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       setBook(info.book)
       setChapters(loaded.chapters)
       setDuration(info.duration)
-      localStorage.setItem(lastKey, b.id)
+      localStorage.setItem(lastKey, b.episode_id ? JSON.stringify({id:b.id,episode_id:b.episode_id}) : b.id)
       const r = Number(localStorage.getItem(rateKey(b.id))) || settingsRef.current?.speed || info.speed || 1
       rateRef.current = r
       setRateState(r)
@@ -279,6 +279,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   }, [audio, chapter, time, toast])
 
   const bookmark = useCallback(async () => {
+    if (cur.current?.book.episode_id || pending.current?.episode_id) return
     const c = cur.current
     const b = c?.book || pending.current
     if (!b) return
@@ -326,7 +327,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       setTime(c.duration)
       localStorage.removeItem(lastKey)
       toast(`Finished “${c.book.title}”`)
-      next()
+      if (!c.book.episode_id) next()
     }
     const onTime = () => {
       const c = cur.current
@@ -452,7 +453,9 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const id = localStorage.getItem(lastKey)
     if (!user || !id || cur.current) return
-    api.get<{ book: Book }>(`${V1}/books/${encodeURIComponent(id)}`).then(({ book: b }) => {
+    let endpoint = `${V1}/books/${encodeURIComponent(id)}`
+    if (id.startsWith('{')) { try { const last = JSON.parse(id); endpoint = `${V1}/podcasts/${encodeURIComponent(last.id)}/episodes/${encodeURIComponent(last.episode_id)}` } catch { localStorage.removeItem(lastKey); return } }
+    api.get<{ book: Book }>(endpoint).then(({ book: b }) => {
       if (owner.current !== user.id) return
       if (cur.current || b.finished) { if (b.finished) localStorage.removeItem(lastKey); return }
       pending.current = b

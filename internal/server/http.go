@@ -77,6 +77,8 @@ func (s *Server) Router() http.Handler {
 				r.Get("/day/{date}", s.handleDay)
 
 				r.HandleFunc("/organize/*", s.nativeOrganize)
+				r.HandleFunc("/podcasts/*", s.nativePodcasts)
+				r.Get("/podcasts", s.nativePodcasts)
 				r.Get("/catalog/manage", s.nativeManage)
 				r.Get("/catalog/metadata/providers", s.nativeProviders)
 				r.Put("/catalog/metadata/providers", s.nativeProviders)

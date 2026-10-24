@@ -68,6 +68,7 @@ export function NativeLibrarySettings() {
     })}
     {user?.role === 'admin' && <><NativeAccounts /><MetadataSettings /></>}
     {user?.role === 'admin' && <section className="set-section"><div className="set-section-head"><h3>Add a library</h3></div><form className="set-section-body stack" onSubmit={create}>
+      <label>Media type<select value={newLibrary.media_type} onChange={e => setNewLibrary({ ...newLibrary, media_type: e.target.value })}><option value="book">Books</option><option value="podcast">Podcasts</option></select></label>
       <label>Name<input required value={newLibrary.name} onChange={e => setNewLibrary({ ...newLibrary, name: e.target.value })} /></label>
       <label>Folder on the server<input required placeholder="/media/audiobooks" value={newLibrary.path} onChange={e => setNewLibrary({ ...newLibrary, path: e.target.value })} /></label>
       <p className="muted small">Use an existing folder mounted into this app's container.</p>

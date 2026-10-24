@@ -15,6 +15,7 @@ import (
 // Probe never gives ffprobe a user-controlled URL. Only a confined regular file
 // descriptor is inherited, with network and playlist demuxers disabled.
 type ProbeResult struct {
+	Format   string
 	Duration float64
 	Tags     map[string]string
 	Chapters []Chapter
@@ -47,6 +48,7 @@ func Probe(ctx context.Context, binary string, file *os.File) (ProbeResult, erro
 	}
 	var raw struct {
 		Format struct {
+			Name     string            `json:"format_name"`
 			Duration string            `json:"duration"`
 			Tags     map[string]string `json:"tags"`
 		} `json:"format"`
@@ -68,7 +70,7 @@ func Probe(ctx context.Context, binary string, file *os.File) (ProbeResult, erro
 	if err := json.Unmarshal(data.Bytes(), &raw); err != nil {
 		return ProbeResult{}, err
 	}
-	out := ProbeResult{Tags: map[string]string{}, Chapters: []Chapter{}}
+	out := ProbeResult{Format: raw.Format.Name, Tags: map[string]string{}, Chapters: []Chapter{}}
 	out.Duration, _ = strconv.ParseFloat(raw.Format.Duration, 64)
 	for _, st := range raw.Streams {
 		if st.Disposition.Attached == 1 {

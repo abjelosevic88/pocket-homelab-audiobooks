@@ -846,7 +846,7 @@ func (s *Server) nativeNowPlaying(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			continue
 		}
-		out = nativeObject{"active": true, "server_time": now.UnixMilli(), "playing": sess.Playing && now.UnixMilli()-sess.UpdatedAt < 40000, "item_id": it.ID, "title": it.Title, "author": it.Author, "cover": "/api/v1/cover/" + it.ID, "position": sess.Position, "duration": sess.Duration, "device": firstNonEmpty(sess.Device, "another device"), "app": "Pocket Audiobooks", "updated_at": sess.UpdatedAt}
+		out = nativeObject{"active": true, "server_time": now.UnixMilli(), "playing": sess.Playing && now.UnixMilli()-sess.UpdatedAt < 40000, "item_id": it.ID, "episode_id": sess.EpisodeID, "title": it.Title, "author": it.Author, "cover": "/api/v1/cover/" + it.ID, "position": sess.Position, "duration": sess.Duration, "device": firstNonEmpty(sess.Device, "another device"), "app": "Pocket Audiobooks", "updated_at": sess.UpdatedAt}
 		break
 	}
 	writeJSON(w, 200, out)

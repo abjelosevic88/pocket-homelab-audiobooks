@@ -64,8 +64,12 @@ func deviceID(client string) string {
 var clientRE = regexp.MustCompile(`^[A-Za-z0-9_-]{1,40}$`)
 
 // openSession starts an Audiobookshelf playback session for a book.
-func (s *Server) openSession(ctx context.Context, ac *absConn, u *store.User, itemID, client, device string, mimes []string, transcode bool) (*abs.Session, *playState, error) {
-	sess, err := ac.c.Play(ctx, itemID, abs.PlayOptions{
+func (s *Server) openSession(ctx context.Context, ac *absConn, u *store.User, itemID, client, device string, mimes []string, transcode bool, episodes ...string) (*abs.Session, *playState, error) {
+	episode := ""
+	if len(episodes) > 0 {
+		episode = episodes[0]
+	}
+	sess, err := ac.c.Play(ctx, itemID, abs.PlayOptions{EpisodeID: episode,
 		DeviceInfo:         abs.DeviceInfo{DeviceID: deviceID(client), ClientName: "Pocket Audiobooks", ClientVersion: Version, DeviceName: trim(device, 60)},
 		SupportedMimeTypes: mimes, ForceTranscode: transcode, MediaPlayer: "pocket-audiobooks",
 	})
@@ -106,6 +110,7 @@ func (s *Server) handlePlay(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var in struct {
+		Episode   string   `json:"episode_id"`
 		Mimes     []string `json:"mime_types"`
 		Client    string   `json:"client"`
 		Device    string   `json:"device"`
@@ -127,17 +132,24 @@ func (s *Server) handlePlay(w http.ResponseWriter, r *http.Request) {
 		s.absErr(w, err)
 		return
 	}
-	if it.MediaType != "book" || it.Media.NumAudioFiles == 0 && len(it.Media.AudioFiles) == 0 {
+	if !(s.cfg.Backend == "native" && it.MediaType == "podcast" && in.Episode != "") && (it.MediaType != "book" || it.Media.NumAudioFiles == 0 && len(it.Media.AudioFiles) == 0) {
 		writeErr(w, http.StatusBadRequest, "this book has no audio")
 		return
 	}
-	sess, ps, err := s.openSession(ctx, ac, u, id, in.Client, in.Device, in.Mimes, in.Transcode)
+	sess, ps, err := s.openSession(ctx, ac, u, id, in.Client, in.Device, in.Mimes, in.Transcode, in.Episode)
 	if err != nil {
 		s.absErr(w, err)
 		return
 	}
 	me, _ := ac.c.Me(ctx)
 	b := bookOf(it, progressMap(me), true)
+	if in.Episode != "" && s.cfg.Backend == "native" {
+		b, err = s.nativeEpisodeBook(ctx, u.ID, id, in.Episode)
+		if err != nil {
+			s.nativeError(w, err)
+			return
+		}
+	}
 	ps.cover = b.Cover
 	st, _ := s.store.GetSettings(ctx, u.ID)
 	writeJSON(w, http.StatusOK, map[string]any{

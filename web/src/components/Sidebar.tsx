@@ -46,7 +46,7 @@ export function Sidebar({ onNavigate }: { onNavigate: () => void }) {
       <nav className="sb-nav" aria-label="Sections">
         <NavLink to="/" end onClick={onNavigate} className={({ isActive }) => `sb-nav-item ${isActive ? 'active' : ''}`}><Icon name="home" size={16} />Home</NavLink>
       </nav>
-      <Group title="Library"><Nav items={settings?.backend === 'native' ? [...LIBRARY, { to: '/lists', label: 'Collections & playlists', icon: 'layers' }] : LIBRARY} onNavigate={onNavigate} /></Group>
+      <Group title="Library"><Nav items={settings?.backend === 'native' ? [...LIBRARY, { to: '/lists', label: 'Collections & playlists', icon: 'layers' }, { to: '/podcasts', label: 'Podcasts', icon: 'headphones' }] : LIBRARY} onNavigate={onNavigate} /></Group>
       <Group title="Yours"><Nav items={YOURS} onNavigate={onNavigate} /></Group>
 
       <div className="sb-foot">
