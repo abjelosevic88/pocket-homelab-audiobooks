@@ -74,11 +74,11 @@ function Expanded() {
         <div className="tabs" role="tablist">
           <button type="button" role="tab" aria-selected={tab === 'now'} className={tab === 'now' ? 'active' : ''} onClick={() => setTab('now')}>Now playing</button>
           {p.chapters.length > 0 && <button type="button" role="tab" aria-selected={tab === 'chapters'} className={tab === 'chapters' ? 'active' : ''} onClick={() => setTab('chapters')}>Chapters</button>}
-          {!b.episode_id && <button type="button" role="tab" aria-selected={tab === 'bookmarks'} className={tab === 'bookmarks' ? 'active' : ''} onClick={() => setTab('bookmarks')}>Bookmarks</button>}
+          {<button type="button" role="tab" aria-selected={tab === 'bookmarks'} className={tab === 'bookmarks' ? 'active' : ''} onClick={() => setTab('bookmarks')}>Bookmarks</button>}
         </div>
         <MenuButton label="More" align="right" width={230} items={(): MenuItem[] => [
-          { label: 'Open the book', icon: 'book-open', onSelect: () => open(b.episode_id ? `/podcasts/${b.id}` : `/book/${b.id}`) },
-          ...(b.episode_id ? [] : [{ label: 'Add a bookmark here', icon: 'bookmark-plus', hint: 'B', onSelect: () => p.bookmark() }] as const),
+          { label: 'Open the book', icon: 'book-open', onSelect: () => open(`/book/${b.id}`) },
+          { label: 'Add a bookmark here', icon: 'bookmark-plus', hint: 'B', onSelect: () => p.bookmark() },
           'sep',
           { label: 'Stop and close', icon: 'x', onSelect: () => { p.stop(); p.setExpanded(false) } },
         ]}><Icon name="more" size={18} /></MenuButton>
@@ -87,7 +87,7 @@ function Expanded() {
         {tab === 'now' && (
           <div className="pf-now">
             <div className="pf-cover"><Img src={b.cover} w={520} alt={b.title} /></div>
-            <div className="pf-title"><Link to={b.episode_id ? `/podcasts/${b.id}` : `/book/${b.id}`} onClick={() => p.setExpanded(false)}>{b.title}</Link></div>
+            <div className="pf-title"><Link to={`/book/${b.id}`} onClick={() => p.setExpanded(false)}>{b.title}</Link></div>
             <div className="muted">{b.authors && b.authors.length ? b.authors.map((a, i) => <span key={a.id}>{i > 0 && ', '}<Link to={`/author/${a.id}`} onClick={() => p.setExpanded(false)}>{a.name}</Link></span>) : b.author}{b.narrator ? <> · read by {b.narrator}</> : null}</div>
             {ch && <div className="pf-chapter">
               <button type="button" className="link-btn" onClick={() => setTab('chapters')}>{ch.title}</button>
@@ -107,7 +107,7 @@ function Expanded() {
             ))}
           </ol>
         )}
-        {tab === 'bookmarks' && !b.episode_id && <BookmarkList book={b} />}
+        {tab === 'bookmarks' && <BookmarkList book={b} />}
       </div>
       <div className="pf-controls">
         <div className="pf-seek">
@@ -126,7 +126,7 @@ function Expanded() {
             { heading: 'Speed' },
             ...RATES.map(r => ({ label: `${r}×`, checked: Math.abs(p.rate - r) < 0.01, onSelect: () => p.setRate(r) })),
           ] as MenuItem[]}><Icon name="gauge" size={14} />{p.rate}×</MenuButton>
-          {!b.episode_id && <button type="button" className="btn sm" onClick={p.bookmark} title="Bookmark this moment (b)"><Icon name="bookmark-plus" size={14} />Bookmark</button>}
+          {<button type="button" className="btn sm" onClick={p.bookmark} title="Bookmark this moment (b)"><Icon name="bookmark-plus" size={14} />Bookmark</button>}
           <MenuButton label="Sleep timer" className={`btn sm ${p.sleepAt ? 'on' : ''}`} align="right" width={200} items={() => [
             { heading: 'Pause after' },
             ...[5, 10, 15, 30, 45, 60, 90].map(m => ({ label: `${m} minutes`, onSelect: () => p.setSleep(m) })),
@@ -181,15 +181,15 @@ function RemoteBar() {
   const ago = Math.round((now + p.clockOffset - (r.updated_at || now)) / 60000)
   const here = async () => {
     try {
-      const { book } = await api.get<{ book: Book }>(r.episode_id ? `${V1}/podcasts/${encodeURIComponent(r.item_id!)}/episodes/${encodeURIComponent(r.episode_id)}` : `${V1}/books/${encodeURIComponent(r.item_id!)}`)
+      const { book } = await api.get<{ book: Book }>(`${V1}/books/${encodeURIComponent(r.item_id!)}`)
       p.play(book, { at: Math.floor(pos) })
     } catch { /* the book page will say why */ }
   }
   return (
     <div className="player-bar remote" role="region" aria-label={`Playing on ${r.device}`}>
       <div className="pb-progress remote"><span className="fill" style={{ width: `${pct}%` }} /></div>
-      <Link to={r.episode_id ? `/podcasts/${r.item_id}` : `/book/${r.item_id}`} className="pb-art"><Img src={r.cover} w={96} alt={r.title || ''} className="xs" /></Link>
-      <Link to={r.episode_id ? `/podcasts/${r.item_id}` : `/book/${r.item_id}`} className="pb-info">
+      <Link to={`/book/${r.item_id}`} className="pb-art"><Img src={r.cover} w={96} alt={r.title || ''} className="xs" /></Link>
+      <Link to={`/book/${r.item_id}`} className="pb-info">
         <div className="t">{r.title}</div>
         <div className="s">
           <span className={`remote-dot ${r.playing ? 'live' : ''}`} aria-hidden />

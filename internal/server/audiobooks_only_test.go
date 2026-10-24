@@ -11,7 +11,7 @@ import (
 func TestAudiobooksOnlyRejectsPodcastAccessAndCreation(t *testing.T) {
 	s, h, a, _, tok := nativeHarness(t)
 	s.store.DB.Exec(`UPDATE users SET role='admin' WHERE id=?`, a.u.ID)
-	s.store.DB.Exec(`UPDATE catalog_accounts SET permissions=json_set(permissions,'$.accessAllLibraries',json('true'),'$.update',json('true')) WHERE pocket_user_id=?`, a.u.ID)
+	s.store.DB.Exec(`UPDATE catalog_accounts SET permissions=json_set(permissions,'$.accessAllLibraries',json('true'),'$.update',json('true'),'$.delete',json('true')) WHERE pocket_user_id=?`, a.u.ID)
 	// Old/restored data must stay inaccessible even if it bypassed retirement.
 	_, err := s.store.DB.Exec(`INSERT INTO catalog_libraries VALUES('pods','Podcasts','podcast',1,'{}');INSERT INTO catalog_items SELECT 'pod','pods','pm','podcast','Hidden podcast',author,duration,explicit,missing,added_at,updated_at,tags,document FROM catalog_items WHERE id='book';INSERT INTO catalog_files SELECT 'pod',id,role,root_id,relative_path,name,mime,size,duration,track_index,excluded,document FROM catalog_files WHERE item_id='book'`)
 	if err != nil {
@@ -31,6 +31,15 @@ func TestAudiobooksOnlyRejectsPodcastAccessAndCreation(t *testing.T) {
 		if w.Code != 200 || strings.Contains(w.Body.String(), "Hidden podcast") || strings.Contains(w.Body.String(), `"id":"pods"`) {
 			t.Fatal(path, w.Code, w.Body.String())
 		}
+	}
+	if _, err := s.store.DB.Exec(`INSERT INTO catalog_trash(id,item_id,title,state,created_at,updated_at,files) VALUES('pod-trash','pod','Hidden podcast','deleted',1,1,'[]')`); err != nil {
+		t.Fatal(err)
+	}
+	if w := nativeCall(t, h, tok, "GET", "/api/v1/catalog/trash", ""); w.Code != 200 || strings.Contains(w.Body.String(), "Hidden podcast") {
+		t.Fatal("retired podcast appeared in trash", w.Code, w.Body.String())
+	}
+	if w := nativeCall(t, h, tok, "POST", "/api/v1/catalog/trash/pod-trash/restore", "{}"); w.Code != 404 {
+		t.Fatal("retired podcast could be restored", w.Code, w.Body.String())
 	}
 	root := t.TempDir()
 	body := string(nativeJSON(nativeObject{"name": "Podcasts", "path": root, "media_type": "podcast"}))

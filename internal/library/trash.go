@@ -61,7 +61,7 @@ func (c *Catalog) trashPermission(ctx context.Context, uid int64, item string) (
 	if err != nil {
 		return it, err
 	}
-	if !a.allows(it) {
+	if !a.allows(it) || c.BooksOnly && it.MediaType != "book" {
 		return it, ErrNotFound
 	}
 	return it, nil

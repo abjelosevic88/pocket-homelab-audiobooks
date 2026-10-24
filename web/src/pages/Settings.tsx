@@ -189,7 +189,7 @@ function ABSAccount() {
         </div>
       </Section>
       {c.connected && c.libraries && c.libraries.length > 0 && (
-        <Section title="Libraries" icon="library" sub="Book libraries you can open. Hide the ones you don't want on Home and in the library (podcast libraries belong to Pocket Podcasts).">
+        <Section title="Libraries" icon="library" sub="Book libraries you can open. Hide the ones you don't want on Home and in the library.">
           <div className="stack">
             {c.libraries.map(l => (
               <SettingRow key={l.id} title={l.name} help={`${l.count.toLocaleString()} books`}><Switch checked={!hidden.has(l.id)} onChange={v => toggleLib(l.id, v)} label={`Show ${l.name}`} /></SettingRow>
