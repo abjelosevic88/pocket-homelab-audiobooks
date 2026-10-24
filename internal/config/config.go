@@ -25,7 +25,8 @@ type Config struct {
 	TrustProxy     bool
 	MetricsEnabled bool
 
-	MaxUploadBytes int64
+	MaxUploadBytes          int64
+	MaxAudiobookUploadBytes int64
 
 	AuthMode             string // local | proxy | none
 	AuthProxyHeader      string
@@ -133,7 +134,8 @@ func Load() (*Config, error) {
 		TrustProxy:     envBool("TRUST_PROXY", true),
 		MetricsEnabled: envBool("METRICS_ENABLED", true),
 
-		MaxUploadBytes: envInt64("MAX_UPLOAD_BYTES", 20<<20),
+		MaxUploadBytes:          envInt64("MAX_UPLOAD_BYTES", 20<<20),
+		MaxAudiobookUploadBytes: envInt64("MAX_AUDIOBOOK_UPLOAD_BYTES", 10<<30),
 
 		AuthMode:             strings.ToLower(env("AUTH_MODE", "local")),
 		AuthProxyHeader:      env("AUTH_PROXY_HEADER", "Remote-User"),
@@ -178,6 +180,9 @@ func Load() (*Config, error) {
 	}
 	if c.OIDCIssuer != "" && (c.OIDCClientID == "" || c.BaseURL == "") {
 		return nil, fmt.Errorf("OIDC_ISSUER needs OIDC_CLIENT_ID and BASE_URL (the callback is BASE_URL/api/v1/auth/oidc/callback)")
+	}
+	if c.MaxAudiobookUploadBytes <= 0 {
+		return nil, fmt.Errorf("MAX_AUDIOBOOK_UPLOAD_BYTES must be positive")
 	}
 	if c.SyncEvery < time.Minute {
 		c.SyncEvery = time.Minute

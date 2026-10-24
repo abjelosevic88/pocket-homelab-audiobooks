@@ -8,6 +8,7 @@ import { V1 } from '../lib/books'
 import { Icon } from '../components/icons'
 import { AuthorTile, BookCard, NotConnected, SeriesTile } from '../components/cards'
 import { Select } from '../components/Select'
+import { UploadBook } from '../components/UploadBook'
 import { Empty, Loading, PageHeader, Segmented, errMsg, useDebounce } from '../components/ui'
 
 const SORTS = [
@@ -44,17 +45,20 @@ function LibraryPicker({ libs, lib, pick }: { libs: LibraryT[]; lib?: LibraryT; 
 
 export default function Library({ view }: { view: 'books' | 'series' | 'authors' }) {
   const { libs, lib, pick, notConnected, error } = useLibrary()
+  const [uploading, setUploading] = useState(false)
+  const [revision, setRevision] = useState(0)
   if (notConnected) return <NotConnected message={notConnected} />
   if (error) return <div className="callout danger"><Icon name="alert" size={15} />{error}</div>
   if (!libs) return <Loading />
   if (!libs.length) return <Empty title="No book libraries" icon="book">Audiobookshelf has no book library you can open (podcast libraries belong to Pocket Podcasts), or you hid them all in Settings.</Empty>
   return (
     <div>
-      <PageHeader title={view === 'books' ? 'Books' : view === 'series' ? 'Series' : 'Authors'} sub={lib ? lib.name : ''} actions={<LibraryPicker libs={libs} lib={lib} pick={pick} />} />
+      <PageHeader title={view === 'books' ? 'Books' : view === 'series' ? 'Series' : 'Authors'} sub={lib ? lib.name : ''} actions={<div className="row wrap"><LibraryPicker libs={libs} lib={lib} pick={pick} /><button className="btn" onClick={() => setRevision(n => n + 1)}>Refresh</button><button className="btn primary" onClick={() => setUploading(true)}><Icon name="upload" size={16} />Upload</button></div>} />
       <Tabs />
-      {lib && view === 'books' && <Books lib={lib.id} key={lib.id} />}
-      {lib && view === 'series' && <Series lib={lib.id} key={lib.id} />}
-      {lib && view === 'authors' && <Authors lib={lib.id} key={lib.id} />}
+      {uploading && <UploadBook library={lib?.id} onClose={() => { setUploading(false); setRevision(n => n + 1) }} onUploaded={id => { pick(id); setRevision(n => n + 1) }} />}
+      {lib && view === 'books' && <Books lib={lib.id} key={`${lib.id}-${revision}`} />}
+      {lib && view === 'series' && <Series lib={lib.id} key={`${lib.id}-${revision}`} />}
+      {lib && view === 'authors' && <Authors lib={lib.id} key={`${lib.id}-${revision}`} />}
     </div>
   )
 }

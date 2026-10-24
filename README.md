@@ -44,6 +44,14 @@
   <img src="docs/screenshots/desktop-book-dark.png" width="420" alt="A book in dark mode">
 </p>
 
+## Upload audiobooks
+
+Open **Library → Upload**, choose a book library and folder, then select the files for one book. Add its title
+and optional author/series, and press **Upload book**. Multiple audio tracks, covers and companion ebooks can
+be uploaded together. The dialog shows transfer progress; after scanning, use **Refresh** to see the new book.
+Your Audiobookshelf account needs upload permission. The default limit is 10 GiB per upload, configurable with
+`MAX_AUDIOBOOK_UPLOAD_BYTES`. Files with matching names in the same destination book folder are replaced.
+
 ## Connect Pocket Homelab
 
 Use this app's base URL in Pocket Homelab's **Audiobookshelf** settings and a personal token from

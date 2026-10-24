@@ -674,3 +674,14 @@ body:has(.player-bar) .toasts { bottom: 88px; }
 .pb-progress.remote:hover { height: 5px; top: -3px; }
 .pb-progress.remote .fill { background: #22c55e; transition: width .5s linear; }
 .remote-here { white-space: nowrap; }
+
+/* Library uploads */
+.upload-fields { border: 0; padding: 0; margin: 0; min-width: 0; }
+.upload-fields input, .upload-fields select { width: 100%; min-width: 0; }
+.upload-file-list { max-height: 150px; overflow: auto; overflow-wrap: anywhere; }
+.upload-file-list ul { padding-left: 20px; }
+.upload-fields ~ [role="status"] progress { width: 100%; accent-color: #0d9488; }
+
+.upload-fields select { font: inherit; font-size: 14px; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; height: 36px; padding: 0 10px; }
+.upload-fields select:focus { border-color: var(--accent); outline: 2px solid var(--accent-soft); }
+.upload-fields select:disabled { opacity: .6; }

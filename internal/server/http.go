@@ -36,9 +36,10 @@ func (s *Server) Router() http.Handler {
 	}
 
 	r.Route("/api/v1", func(r chi.Router) {
-		// long-lived: audio, playlists and covers must not hit the request timeout or be gzipped
+		// Long transfers: uploads, audio, playlists and covers bypass timeout/compression.
 		r.Group(func(r chi.Router) {
 			r.Use(s.requireAuth)
+			r.Post("/upload", s.handleUpload)
 			r.Get("/media/*", s.handleMedia)
 			r.Head("/media/*", s.handleMedia)
 			r.Get("/cover/{id}", s.handleCover)
@@ -71,6 +72,7 @@ func (s *Server) Router() http.Handler {
 				r.Get("/day/{date}", s.handleDay)
 
 				r.Get("/libraries", s.handleLibraries)
+				r.Get("/upload", s.handleUploadOptions)
 				r.Get("/books", s.handleBooks)
 				r.Get("/books/{id}", s.handleBook)
 				r.Post("/books/{id}/progress", s.handleProgress)

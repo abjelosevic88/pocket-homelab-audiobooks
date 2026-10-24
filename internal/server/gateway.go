@@ -106,14 +106,12 @@ func (s *Server) handleGateway(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Replay small JSON writes if the ABS access token needs refreshing. Uploads
-	// stream without buffering a book into memory; refresh before starting them.
 	if r.Method == "POST" && r.URL.Path == "/api/upload" {
-		if _, err := ac.c.Me(r.Context()); err != nil {
-			s.absErr(w, err)
-			return
-		}
-	} else if r.Body != nil && r.Body != http.NoBody {
+		s.proxyABSUpload(w, r, ac)
+		return
+	}
+	// Replay small JSON writes if the ABS access token needs refreshing.
+	if r.Body != nil && r.Body != http.NoBody {
 		b, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 8<<20))
 		if err != nil {
 			writeErr(w, http.StatusRequestEntityTooLarge, "request body too large")

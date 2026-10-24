@@ -295,6 +295,9 @@ func (c *Client) Logout(ctx context.Context, refresh string) error {
 
 // Me is the signed-in account with its progress and bookmarks.
 type Me struct {
+	Permissions struct {
+		Upload bool `json:"upload"`
+	} `json:"permissions"`
 	ID                  string          `json:"id"`
 	Username            string          `json:"username"`
 	Email               string          `json:"email"`
@@ -376,6 +379,10 @@ func trimFloat(f float64) string {
 
 // Library is one library on the server.
 type Library struct {
+	Folders []struct {
+		ID       string `json:"id"`
+		FullPath string `json:"fullPath"`
+	} `json:"folders"`
 	ID           string `json:"id"`
 	Name         string `json:"name"`
 	MediaType    string `json:"mediaType"` // book | podcast

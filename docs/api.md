@@ -107,3 +107,16 @@ even for an ABS administrator. Unknown operations, user administration and key m
 
 This is the API used by Pocket Homelab's existing token-based player. It does not implement Audiobookshelf's
 password/OIDC sign-in or Socket.IO; clients requiring those flows still use Audiobookshelf directly.
+
+## Uploads
+
+`GET /api/v1/upload` returns `{allowed, max_bytes, libraries}` for the signed-in person. Only book libraries are
+listed, including their `folders` (`id`, `fullPath`). `allowed` comes from their Audiobookshelf upload permission.
+
+`POST /api/v1/upload` accepts streaming multipart form data: required `library`, `folder`, `title`, optional
+`author` and `series`, and numbered file parts (`0`, `1`, …). The native gateway's `/api/upload` uses the same
+streaming implementation. Files are forwarded as the person's account; Audiobookshelf validates the library
+and folder access. No complete-file buffering in Pocket memory or its data volume, and no short API timeout.
+Success is Audiobookshelf's `200 OK`; scanning may finish later. Matching destination filenames are overwritten.
+The configured whole-request size limit applies even without Content-Length. Oversized requests return 413;
+accounts without upload permission return 403 before any file bytes are forwarded.

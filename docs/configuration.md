@@ -62,3 +62,10 @@ sealed with `DATA_DIR/secret.key`. With Pocket Core, Core can hold the login ins
 
 With `CORE_URL` empty the app behaves exactly as a standalone app: every Core-only choice stays visible, greyed out
 with a note.
+
+## Audiobook uploads
+
+`MAX_AUDIOBOOK_UPLOAD_BYTES` caps one multipart audiobook upload (default `10737418240`, 10 GiB). This is separate
+from `MAX_UPLOAD_BYTES`, the smaller limit used for data imports. Uploads stream to Audiobookshelf using the
+signed-in person's upload permission. Allow an equivalent request size and sufficiently long upload timeouts
+in any reverse proxy. Audiobookshelf requires free space in its metadata temporary directory and library folder.
