@@ -129,8 +129,19 @@ func (s *Server) Router() http.Handler {
 	})
 	r.HandleFunc("/api/*", s.handleGateway)
 	r.HandleFunc("/hls/*", s.handleGateway)
+	// Sign-in and live updates for third-party Audiobookshelf apps, and every native
+	// route under /audiobookshelf too (absgateway.go). GET /login stays the web sign-in page.
+	r.Get("/login", s.handleSPA)
+	r.Post("/login", s.gwLogin)
+	r.Post("/auth/refresh", s.gwRefresh)
+	r.Post("/logout", s.gwLogout)
+	r.Post("/api/authorize", s.gwAuthorizeRoute)
+	r.HandleFunc("/socket.io/*", s.handleABSSocket)
+	r.HandleFunc("/audiobookshelf", s.handleABSPrefixed)
+	r.HandleFunc("/audiobookshelf/*", s.handleABSPrefixed)
 
 	r.NotFound(s.handleSPA)
+	s.mux = r
 	return r
 }
 

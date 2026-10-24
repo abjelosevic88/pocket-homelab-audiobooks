@@ -105,8 +105,13 @@ Each request uses the person's configured Audiobookshelf connection. Backend acc
 in responses and refresh tokens are removed. HLS and playback sessions are checked against the person's ABS user,
 even for an ABS administrator. Unknown operations, user administration and key management are rejected.
 
-This is the API used by Pocket Homelab's existing token-based player. It does not implement Audiobookshelf's
-password/OIDC sign-in or Socket.IO; clients requiring those flows still use Audiobookshelf directly.
+Third-party Audiobookshelf apps (the Audiobookshelf app, AudioBooth, Plappa, ShelfPlayer…) work too: `/status`
+offers username/password sign-in, and `POST /login` takes the person's email with an **app password** (a `pab_`
+token, Settings → Apps & API → Audiobookshelf apps) — or their Pocket Audiobooks password, which gets the app its
+own token. `POST /api/authorize`, `POST /auth/refresh` and `POST /logout` answer like Audiobookshelf; socket.io
+(`/socket.io/`, websocket and polling) is relayed with the app's token swapped for the person's Audiobookshelf one in
+the `auth` event and back. Every native route also answers under `/audiobookshelf/…` for apps that expect that
+path. OpenID sign-in is not offered.
 
 ## Uploads
 

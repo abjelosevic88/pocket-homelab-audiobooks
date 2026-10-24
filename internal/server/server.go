@@ -55,6 +55,8 @@ type Server struct {
 
 	playMu sync.Mutex
 	plays  map[string]*playState // playback session → what is playing
+
+	mux http.Handler // the router, for /audiobookshelf/… (absgateway.go)
 }
 
 // New creates a server.

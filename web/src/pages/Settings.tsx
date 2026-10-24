@@ -20,7 +20,7 @@ const TABS: { id: TabId; label: string; icon: string; sub: string; admin?: boole
   { id: 'notifications', label: 'Notifications', icon: 'bell', sub: 'A push when you finish a book, and a weekly recap.' },
   { id: 'profile', label: 'Profile', icon: 'user', sub: 'Your name, email and password.' },
   { id: 'people', label: 'People', icon: 'users', sub: 'Everyone who has an account on this box.' },
-  { id: 'tokens', label: 'API & shortcuts', icon: 'key', sub: 'Connect Pocket Homelab, Homepage widgets and shortcuts.' },
+  { id: 'tokens', label: 'Apps & API', icon: 'key', sub: 'Audiobookshelf apps on your phone or in the car, Pocket Homelab, Homepage widgets and shortcuts.' },
   { id: 'data', label: 'Backup & data', icon: 'database', sub: 'Download the database, export your history or import it.' },
   { id: 'about', label: 'About', icon: 'info', sub: 'Version, numbers and the server.' },
 ]
@@ -354,8 +354,23 @@ function Tokens() {
     try { const r = await api.post<{ token: string }>(`${V1}/tokens`, { name: name || 'token' }); setFresh(r.token); setName(''); reload() } catch (e) { toast(errMsg(e), 'err') }
   }
   const base = settings?.base_url || window.location.origin
+  const { user } = useApp()
+  const [appPw, setAppPw] = useState('')
+  const makeAppPassword = async () => {
+    try { const r = await api.post<{ token: string }>(`${V1}/tokens`, { name: 'Audiobookshelf app' }); setAppPw(r.token); reload() } catch (e) { toast(errMsg(e), 'err') }
+  }
   return (
     <div className="stack loose">
+      <Section title="Audiobookshelf apps" icon="headphones" sub="The Audiobookshelf app, AudioBooth, Plappa, ShelfPlayer and other Audiobookshelf players can use Pocket Audiobooks as their server: the same books, your place, bookmarks and history, with your own Audiobookshelf account underneath.">
+        <dl className="set-dl">
+          <div><dt>Server address</dt><dd><code>{base}</code> <span className="muted small">(or <code>{base}/audiobookshelf</code> if the app wants a path)</span></dd></div>
+          <div><dt>Username</dt><dd><code>{user?.email}</code></dd></div>
+          <div><dt>Password</dt><dd>an app password — one per app, so you can revoke it alone below</dd></div>
+        </dl>
+        {appPw ? <div className="set-fresh mt"><div className="row"><Icon name="check-circle" size={16} /><b>Your app password — paste it into the app now, it is shown once.</b></div><pre className="mono">{appPw}</pre></div>
+          : <div className="row mt"><button type="button" className="btn primary" onClick={makeAppPassword}><Icon name="key" size={15} />Create an app password</button></div>}
+        <p className="muted small mt">Sign in with username and password (not OpenID). Your Pocket Audiobooks password works too where you have one; the app then gets its own token.</p>
+      </Section>
       <Section title="Connect Pocket Homelab" icon="smartphone" sub="Listen in the app with the same library and saved progress.">
         <p>In the app’s Audiobookshelf settings, set the server to <code>{base}</code> and paste a personal token created below.</p>
         <p className="muted">If you paired through Pocket Core, choose Pocket Audiobooks under Devices → Apps on your devices, then refresh the app’s Core configuration. Core supplies the address and your device token.</p>

@@ -52,6 +52,14 @@ be uploaded together. The dialog shows transfer progress; after scanning, use **
 Your Audiobookshelf account needs upload permission. The default limit is 10 GiB per upload, configurable with
 `MAX_AUDIOBOOK_UPLOAD_BYTES`. Files with matching names in the same destination book folder are replaced.
 
+## Use it from Audiobookshelf apps
+
+The Audiobookshelf app, AudioBooth, Plappa, ShelfPlayer and other Audiobookshelf players can sign in to Pocket
+Audiobooks as if it were Audiobookshelf: server address = this app's address (or `…/audiobookshelf`), username = your
+email, password = an **app password** from **Settings → Apps & API → Audiobookshelf apps**. Everything goes on to
+Audiobookshelf as your own account — your place, bookmarks and downloads work as before, the listening lands in your
+history here, and your Audiobookshelf key never reaches the phone. Details in [docs/api.md](docs/api.md).
+
 ## Connect Pocket Homelab
 
 Use this app's base URL in Pocket Homelab's **Audiobookshelf** settings and a personal token from

@@ -25,6 +25,7 @@ type fakeABS struct {
 	synced   []string // key|session|time
 	closed   []string
 	finished map[string]bool // key → book marked finished
+	socket   []string        // socket.io bodies as Audiobookshelf got them
 }
 
 func (f *fakeABS) key(r *http.Request) string {
@@ -67,8 +68,11 @@ func newFakeABS(t *testing.T) (*httptest.Server, *fakeABS) {
 				{"index": 2, "startOffset": 1800, "duration": 1800, "contentUrl": "/api/items/" + bookID + "/file/12", "mimeType": "audio/mpeg"}}})
 	})
 	mux.HandleFunc("/api/items/"+bookID+"/file/", func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Query().Get("token") != "" {
-			t.Errorf("a key reached Audiobookshelf in the URL")
+		if strings.HasPrefix(r.URL.Query().Get("token"), "pab_") {
+			t.Errorf("an app token reached Audiobookshelf in the URL")
+		}
+		if q := r.URL.Query().Get("token"); q != "" && r.Header.Get("Authorization") == "" {
+			r.Header.Set("Authorization", "Bearer "+q)
 		}
 		f.mu.Lock()
 		f.streamed = append(f.streamed, f.key(r)+"|"+r.Header.Get("Range"))
@@ -117,6 +121,19 @@ func newFakeABS(t *testing.T) (*httptest.Server, *fakeABS) {
 			// Audra reports a podcast episode as a "book" without a library: not a book here
 			{"id": "pod-" + f.key(r), "libraryItemId": "li-podcast", "mediaType": "book", "displayTitle": "A YouTube video", "duration": 600, "timeListening": 300,
 				"startedAt": now - 3_600_000, "updatedAt": now - 3_500_000}}})
+	})
+	mux.HandleFunc("/api/authorize", func(w http.ResponseWriter, r *http.Request) {
+		k := f.key(r)
+		_ = json.NewEncoder(w).Encode(map[string]any{"user": map[string]any{"id": "u-" + k, "username": "user-" + k, "token": "legacy-" + k, "accessToken": k},
+			"userDefaultLibraryId": "lib1", "serverSettings": map[string]any{"authActiveAuthMethods": []string{"openid"}}})
+	})
+	mux.HandleFunc("/socket.io/", func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		f.mu.Lock()
+		f.socket = append(f.socket, string(b))
+		f.mu.Unlock()
+		w.Header().Set("Content-Type", "text/plain")
+		_, _ = io.WriteString(w, `42["init",{"token":"`+strings.TrimPrefix(string(b), "42[\"auth\",\"")+`"}]`)
 	})
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)

@@ -250,8 +250,9 @@ func (s *Server) handleGatewayStatus(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusServiceUnavailable, "Audiobookshelf unavailable")
 		return
 	}
-	// This gateway authenticates with Pocket tokens, not the upstream OIDC flow.
-	writeJSON(w, http.StatusOK, map[string]any{"app": "audiobookshelf", "serverVersion": st.ServerVersion, "isInit": st.IsInit, "authMethods": []string{}, "gateway": "Pocket Audiobooks"})
+	// Apps sign in here with an app password (absgateway.go), never the upstream OIDC flow.
+	writeJSON(w, http.StatusOK, map[string]any{"app": "audiobookshelf", "serverVersion": st.ServerVersion, "isInit": st.IsInit, "language": "en-us",
+		"authMethods": []string{"local"}, "authFormData": map[string]any{}, "gateway": "Pocket Audiobooks"})
 }
 
 // Playback session ids are also ABS HLS stream ids.
