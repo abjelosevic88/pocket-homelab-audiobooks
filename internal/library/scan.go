@@ -71,7 +71,7 @@ func (c *Catalog) CanScan(ctx context.Context, uid int64, lib string) error {
 		return ErrNotFound
 	}
 	var typ string
-	if err = c.DB.QueryRowContext(ctx, `SELECT media_type FROM catalog_libraries WHERE id=?`, lib).Scan(&typ); err != nil {
+	if err = c.DB.QueryRowContext(ctx, `SELECT media_type FROM catalog_libraries WHERE id=? AND NOT EXISTS(SELECT 1 FROM catalog_library_state s WHERE s.library_id=catalog_libraries.id AND s.archived=1)`, lib).Scan(&typ); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return ErrNotFound
 		}
@@ -174,6 +174,10 @@ func (c *Catalog) Scan(ctx context.Context, uid int64, lib string, opt ScanOptio
 	report = ScanReport{ID: newID(), LibraryID: lib}
 	if err = c.CanScan(ctx, uid, lib); err != nil {
 		return
+	}
+	var libraryRevision int64
+	if err = c.DB.QueryRowContext(ctx, `SELECT COALESCE((SELECT revision FROM catalog_library_state WHERE library_id=?),0)`, lib).Scan(&libraryRevision); err != nil {
+		return report, err
 	}
 	folders, err := c.scanFolders(ctx, lib)
 	if err != nil {
@@ -447,6 +451,13 @@ func (c *Catalog) Scan(ctx context.Context, uid int64, lib string, opt ScanOptio
 		return report, err
 	}
 	defer tx.Rollback()
+	var currentRevision int64
+	if err = tx.QueryRowContext(ctx, `SELECT COALESCE((SELECT revision FROM catalog_library_state WHERE library_id=?),0)`, lib).Scan(&currentRevision); err != nil {
+		return report, err
+	}
+	if currentRevision != libraryRevision {
+		return report, fmt.Errorf("%w: library settings changed during scan", ErrConflict)
+	}
 	for _, book := range books {
 		if removed[book.Item.ID] {
 			continue

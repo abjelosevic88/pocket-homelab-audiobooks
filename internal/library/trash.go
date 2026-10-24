@@ -185,6 +185,14 @@ func (c *Catalog) Trash(ctx context.Context, uid int64, item, episode string, mo
 		if !stat.Mode().IsRegular() {
 			return v, fmt.Errorf("%w: only regular indexed files can move to trash", ErrInvalid)
 		}
+		physicalShared, e := c.trashSharedFile(ctx, item, *f, stat)
+		if e != nil {
+			return v, e
+		}
+		if physicalShared {
+			f.Shared = true
+			continue
+		}
 		f.Size, f.Modified, f.Identity = stat.Size(), stat.ModTime().UnixNano(), fileIdentity(stat)
 	}
 	tx, err := c.DB.BeginTx(ctx, nil)
@@ -470,4 +478,40 @@ func (c *Catalog) RecoverTrash(ctx context.Context) error {
 func (c *Catalog) CanDelete(ctx context.Context, uid int64, item string) error {
 	_, err := c.trashPermission(ctx, uid, item)
 	return err
+}
+
+// Nested mounts and symlinked directories can expose one physical file under
+// different catalog roots. Protect those references as well as identical paths.
+func (c *Catalog) trashSharedFile(ctx context.Context, item string, f trashFile, source fs.FileInfo) (bool, error) {
+	rows, err := c.DB.QueryContext(ctx, `SELECT r.local_path,c.relative_path FROM catalog_files c JOIN catalog_roots r ON r.id=c.root_id WHERE c.item_id<>? AND c.name=?`, item, filepath.Base(f.Source))
+	if err != nil {
+		return false, err
+	}
+	type candidate struct{ root, path string }
+	all := []candidate{}
+	for rows.Next() {
+		var v candidate
+		if err = rows.Scan(&v.root, &v.path); err != nil {
+			rows.Close()
+			return false, err
+		}
+		all = append(all, v)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return false, err
+	}
+	for _, v := range all {
+		root, e := os.OpenRoot(v.root)
+		if e != nil {
+			continue
+		}
+		stat, e := root.Stat(v.path)
+		root.Close()
+		if e == nil && os.SameFile(source, stat) {
+			return true, nil
+		}
+	}
+	return false, nil
 }

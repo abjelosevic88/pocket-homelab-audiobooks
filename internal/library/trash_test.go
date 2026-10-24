@@ -141,3 +141,25 @@ func TestTrashPurgeAndChangedFileProtection(t *testing.T) {
 		t.Fatal("restored purged bytes", err)
 	}
 }
+
+func TestTrashPreservesPhysicalFileSharedThroughAnotherRoot(t *testing.T) {
+	f := trashFixture(t)
+	ctx := context.Background()
+	if _, err := f.catalog.DB.Exec(`INSERT INTO catalog_roots VALUES('alias','/alias',?); UPDATE catalog_files SET root_id='alias',relative_path='chapter.mp3',name='chapter.mp3' WHERE item_id<>'visible'`, f.root); err != nil {
+		t.Fatal(err)
+	}
+	it, _ := f.catalog.Item(ctx, 1, "visible")
+	v, err := f.catalog.Trash(ctx, 1, it.ID, "", true, it.UpdatedAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = os.Stat(filepath.Join(f.root, "chapter.mp3")); err != nil {
+		t.Fatal("removed another root's referenced file", err)
+	}
+	if _, err = f.catalog.TrashAction(ctx, 1, v.ID, "purge"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = os.Stat(filepath.Join(f.root, "chapter.mp3")); err != nil {
+		t.Fatal("purged shared file", err)
+	}
+}

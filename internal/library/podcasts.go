@@ -53,7 +53,7 @@ func (c *Catalog) Subscribe(ctx context.Context, uid int64, in PodcastOptions, f
 		return "", ErrInvalid
 	}
 	var typ string
-	if err = c.DB.QueryRowContext(ctx, `SELECT media_type FROM catalog_libraries WHERE id=?`, in.LibraryID).Scan(&typ); err != nil {
+	if err = c.DB.QueryRowContext(ctx, `SELECT media_type FROM catalog_libraries WHERE id=? AND NOT EXISTS(SELECT 1 FROM catalog_library_state s WHERE s.library_id=catalog_libraries.id AND s.archived=1)`, in.LibraryID).Scan(&typ); err != nil {
 		return "", err
 	}
 	if typ != "podcast" {

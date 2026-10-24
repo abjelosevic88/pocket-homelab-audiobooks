@@ -253,7 +253,7 @@ func (s *Server) nativeScanLoop(ctx context.Context) {
 			return
 		case <-tick.C:
 		}
-		rows, err := s.store.DB.QueryContext(ctx, `SELECT library_id,actor_id FROM catalog_scan_settings WHERE enabled=1 AND last_started+interval_seconds<=?`, time.Now().Unix())
+		rows, err := s.store.DB.QueryContext(ctx, `SELECT library_id,actor_id FROM catalog_scan_settings WHERE enabled=1 AND NOT EXISTS(SELECT 1 FROM catalog_library_state s WHERE s.library_id=catalog_scan_settings.library_id AND s.archived=1) AND last_started+interval_seconds<=?`, time.Now().Unix())
 		if err != nil {
 			continue
 		}

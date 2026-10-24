@@ -99,6 +99,8 @@ func (s *Server) Router() http.Handler {
 				r.Post("/catalog/items/{id}/trash", s.nativeTrash)
 				r.Post("/catalog/trash/{trash}/{action}", s.nativeTrash)
 				r.Get("/catalog/manage", s.nativeManage)
+				r.Get("/catalog/library-settings", s.nativeLibrarySettings)
+				r.Put("/catalog/libraries/{id}/settings", s.nativeLibrarySettings)
 				r.Get("/catalog/metadata/providers", s.nativeProviders)
 				r.Put("/catalog/metadata/providers", s.nativeProviders)
 				r.Get("/catalog/metadata/search", s.nativeMetadataSearch)

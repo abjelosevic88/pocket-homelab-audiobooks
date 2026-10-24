@@ -103,7 +103,7 @@ as a standalone implementation.
 
 | Area | Required behavior | Standalone verification |
 | --- | --- | --- |
-| Libraries | Multiple libraries/folders; ordering; book and podcast media; access restrictions | Imported browse/access verified; management pending |
+| Libraries | Multiple libraries/folders; ordering; book and podcast media; access restrictions | Imported browse/access, multiple folders, renaming, ordering, empty-library media type changes and reversible archival implemented; browser and permission tests verify archival/restoration |
 | Scanning | Incremental scan, watcher, manual/rescan, missing files, regrouping, file moves | Incremental/manual scans, polling, missing records and same-root moves verified; regrouping/cross-root moves pending |
 | Book ingestion | Single/multiple audio files, ebooks, tags, sidecars, chapters, covers, track order | Audio tags, natural ordering, embedded chapters, covers and JSON/text sidecars verified; legacy metadata.abs and multi-disc grouping pending |
 | Library management | Uploads, metadata/chapter editing, bulk operations, download, safe deletion | Validated uploads, metadata/chapters/covers and single-file and streamed book ZIP downloads implemented; recoverable deletion/restore/purge implemented; bulk editing tools pending |
@@ -322,3 +322,22 @@ Unsupported operations still return an explicit error. Imported date strings are
 normalized to client milliseconds. The owner-only snapshot rehearsal verifies all
 11 shows and 77 episode records without running downloads or modifying media.
 Browser checks cover episode edit, feed refresh and recoverable deletion/restore.
+
+## Library management
+
+Library settings support renaming, order, multiple existing folders and changing
+media type while empty. Adding folders validates every path before committing.
+Removing a folder containing indexed items, including trash, is refused until
+those items move; existing paths are not silently remapped. Edits carry revisions.
+Concurrent scans either block a settings edit or reject their stale catalog commit.
+
+Archiving hides the library from browse, direct item/file APIs, shares and playback;
+scanners and automatic podcast jobs skip it. Recent active playback must pause
+before archival. Restore reuses the same IDs, files, permissions and personal state.
+No source media is deleted by archiving. The library-settings page lists archived
+libraries separately from the active browse list. Current admin and full library
+permissions are required; archival also requires delete permission.
+
+Client library creation, patch, atomic ordering, scan and delete routes use these
+native operations. Client library deletion archives rather than erasing media.
+Shared-file protection includes alternate catalog roots pointing at the same file.

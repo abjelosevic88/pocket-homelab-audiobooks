@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import {LibrarySettingsEditor} from './LibrarySettingsEditor'
 import { MetadataSettings } from './MetadataSettings'
 import { NativeAccounts } from './NativeAccounts'
 import { useApp } from '../lib/app-context'
@@ -66,7 +67,7 @@ export function NativeLibrarySettings() {
         </div>}
       </section>
     })}
-    {user?.role === 'admin' && <><NativeAccounts /><MetadataSettings /></>}
+    {user?.role === 'admin' && <><LibrarySettingsEditor refresh={libraries.map(l=>l.id).join(',')} onChanged={()=>void load()}/><NativeAccounts /><MetadataSettings /></>}
     {user?.role === 'admin' && <section className="set-section"><div className="set-section-head"><h3>Add a library</h3></div><form className="set-section-body stack" onSubmit={create}>
       <label>Media type<select value={newLibrary.media_type} onChange={e => setNewLibrary({ ...newLibrary, media_type: e.target.value })}><option value="book">Books</option><option value="podcast">Podcasts</option></select></label>
       <label>Name<input required value={newLibrary.name} onChange={e => setNewLibrary({ ...newLibrary, name: e.target.value })} /></label>

@@ -284,7 +284,7 @@ func (s *Server) nativePodcastLoop(ctx context.Context) {
 		var id string
 		var uid, last int64
 		var maxNew int
-		err := s.store.DB.QueryRowContext(ctx, `SELECT item_id,actor_id,last_check,max_new FROM catalog_podcast_subscriptions WHERE auto_download=1 AND actor_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM catalog_removed_items r WHERE r.item_id=catalog_podcast_subscriptions.item_id) AND last_check+interval_seconds*1000<=? ORDER BY last_check LIMIT 1`, time.Now().UnixMilli()).Scan(&id, &uid, &last, &maxNew)
+		err := s.store.DB.QueryRowContext(ctx, `SELECT item_id,actor_id,last_check,max_new FROM catalog_podcast_subscriptions WHERE auto_download=1 AND actor_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM catalog_library_state s JOIN catalog_items i ON i.library_id=s.library_id WHERE i.id=catalog_podcast_subscriptions.item_id AND s.archived=1) AND NOT EXISTS(SELECT 1 FROM catalog_removed_items r WHERE r.item_id=catalog_podcast_subscriptions.item_id) AND last_check+interval_seconds*1000<=? ORDER BY last_check LIMIT 1`, time.Now().UnixMilli()).Scan(&id, &uid, &last, &maxNew)
 		if err != nil {
 			continue
 		}

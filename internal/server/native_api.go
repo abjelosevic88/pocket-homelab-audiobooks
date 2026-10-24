@@ -128,6 +128,10 @@ func (s *Server) nativeAPI(w http.ResponseWriter, r *http.Request, uid int64) {
 		s.nativeListAPI(w, r, uid, parts[1], parts[2:])
 		return
 	}
+	if strings.HasPrefix(path, "/api/libraries") && !read {
+		s.nativeLibraryWrite(w, r, uid)
+		return
+	}
 	if path == "/api/libraries" && read {
 		libs, err := s.nativeLibraries(ctx, uid)
 		if err != nil {

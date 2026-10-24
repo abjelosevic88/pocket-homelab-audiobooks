@@ -6,8 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 )
@@ -186,52 +184,57 @@ func editItem(ctx context.Context, tx *sql.Tx, a Account, it Item, in EditOption
 }
 
 type NewLibrary struct {
-	Name      string `json:"name"`
-	MediaType string `json:"media_type"`
-	Path      string `json:"path"`
+	Name      string   `json:"name"`
+	MediaType string   `json:"media_type"`
+	Path      string   `json:"path"`
+	Paths     []string `json:"paths,omitempty"`
 }
 
 func (c *Catalog) CreateLibrary(ctx context.Context, uid int64, in NewLibrary) (string, error) {
-	a, err := c.Account(ctx, uid)
-	if err != nil {
+	if err := c.CanManageLibraries(ctx, uid); err != nil {
 		return "", err
 	}
-	if !a.Permissions.Update || !a.Permissions.AllLibraries || !a.Permissions.AllTags || !a.Permissions.Explicit {
-		return "", ErrNotFound
-	}
 	name := strings.TrimSpace(in.Name)
-	if name == "" || len(name) > 200 || !filepath.IsAbs(in.Path) || filepath.Clean(in.Path) != in.Path || (in.MediaType != "book" && in.MediaType != "podcast") {
+	paths := in.Paths
+	if len(paths) == 0 && in.Path != "" {
+		paths = []string{in.Path}
+	}
+	if name == "" || len(name) > 200 || len(paths) == 0 || len(paths) > 100 || (in.MediaType != "book" && in.MediaType != "podcast") {
 		return "", ErrInvalid
 	}
-	root, err := os.OpenRoot(in.Path)
-	if err != nil {
-		return "", fmt.Errorf("library directory is unavailable: %w", err)
+	for i, path := range paths {
+		if err := validateLibraryFolder(path); err != nil {
+			return "", err
+		}
+		for j := 0; j < i; j++ {
+			if under(path, paths[j]) || under(paths[j], path) {
+				return "", fmt.Errorf("%w: library folders must not overlap", ErrInvalid)
+			}
+		}
 	}
-	root.Close()
 	tx, err := c.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return "", err
 	}
 	defer tx.Rollback()
-	id, folder, rid := newID(), newID(), newID()
-	var existing string
-	err = tx.QueryRowContext(ctx, `SELECT id FROM catalog_roots WHERE source_path=? AND local_path=?`, in.Path, in.Path).Scan(&existing)
-	if err == nil {
-		rid = existing
-	} else if errors.Is(err, sql.ErrNoRows) {
-		if _, err = tx.ExecContext(ctx, `INSERT INTO catalog_roots VALUES(?,?,?)`, rid, in.Path, in.Path); err != nil {
+	id := newID()
+	var order int
+	if err = tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(display_order),-1)+1 FROM catalog_libraries`).Scan(&order); err != nil {
+		return "", err
+	}
+	doc := sourceRow{"id": id, "name": name, "mediaType": in.MediaType, "settings": sourceRow{}, "displayOrder": order}
+	if _, err = tx.ExecContext(ctx, `INSERT INTO catalog_libraries VALUES(?,?,?,?,?)`, id, name, in.MediaType, order, raw(doc)); err != nil {
+		return "", err
+	}
+	for _, path := range paths {
+		if _, err = ensureLibraryRoot(ctx, tx, path); err != nil {
 			return "", err
 		}
-	} else {
-		return "", err
-	}
-	doc := sourceRow{"id": id, "name": name, "mediaType": in.MediaType, "settings": sourceRow{}, "displayOrder": 0}
-	if _, err = tx.ExecContext(ctx, `INSERT INTO catalog_libraries VALUES(?,?,?,0,?)`, id, name, in.MediaType, raw(doc)); err != nil {
-		return "", err
-	}
-	fdoc := sourceRow{"id": folder, "path": in.Path, "libraryId": id}
-	if _, err = tx.ExecContext(ctx, `INSERT INTO catalog_entities VALUES('libraryFolders',?,?,?)`, folder, id, raw(fdoc)); err != nil {
-		return "", err
+		folder := newID()
+		fdoc := sourceRow{"id": folder, "path": path, "libraryId": id}
+		if _, err = tx.ExecContext(ctx, `INSERT INTO catalog_entities VALUES('libraryFolders',?,?,?)`, folder, id, raw(fdoc)); err != nil {
+			return "", err
+		}
 	}
 	return id, tx.Commit()
 }
