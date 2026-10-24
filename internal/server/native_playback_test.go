@@ -247,6 +247,7 @@ func TestNativeBrowserAcceptance(t *testing.T) {
 	if _, err = s.store.DB.Exec(`INSERT INTO catalog_entities VALUES('libraryFolders','folder','lib','{"id":"folder","path":"/media"}')`); err != nil {
 		t.Fatal(err)
 	}
+	addEbookFixture(t, s, filepath.Join(root, "Test Book"))
 	podRoot := t.TempDir()
 	if _, err = s.store.DB.Exec(`INSERT INTO catalog_roots VALUES('podroot','/podcasts',?)`, podRoot); err != nil {
 		t.Fatal(err)

@@ -47,6 +47,14 @@ explicitly exclude `fika` and `raycast`, including their personal state and owne
 the rehearsal snapshot still contains the original accounts. No source passwords, tokens or email addresses
 were loaded into the catalog accounts table.
 
+The owner-only rehearsal subsequently imported the same snapshot with explicit
+account exclusions: one mapped account, nine progress records and 63 sessions.
+The exclusion report accounts for two omitted accounts, two progress records and
+29 sessions. All 1,517 library items and 15,656 file records remain indexed.
+All 248 imported EPUB archives passed read-only preparation for the native reader,
+including the three using standard font obfuscation. Generated EPUB and PDF browser
+tests verify reading, chapter jumps, per-file positions and saved-position reloads.
+
 There are 15,656 indexed file records, including cover/episode records beyond the
 initial libraryFiles inventory. Five unavailable records belong to two podcast
 items and are retained with their original metadata. These are pre-existing
@@ -106,7 +114,7 @@ as a standalone implementation.
 | Device sync | Sessions, handoff, retries, offline reports, conflicts, live updates | Native engine, web outbox and cumulative offline session uploads verified, including concurrent/reordered retries, imported-session reconciliation and newer-position protection; legacy online delta-only clients need stable report IDs for exact retry accounting |
 | Clients | Native Pocket app API, third-party login, refresh, token streams, Socket.IO | Pending |
 | Organisation | Collections, personal playlists, bulk add/remove/reorder | Imported associations, CRUD, ordered batch changes and private ownership verified in API/store tests; create/edit verified in the browser |
-| Ebooks | Serving/reading contract, reading progress, companion books, sending to ereaders | Pending |
+| Ebooks | Serving/reading contract, reading progress, companion books, sending to ereaders | EPUB/PDF web reading, chapter navigation, text size, EPUB CFI/PDF page resume, separate companion positions, optimistic conflict checks, durable browser saves and original-file client downloads implemented. Browser EPUB/PDF save/reload verified. Ereader delivery and remaining formats/tools pending |
 | Podcasts | Feeds/OPML, discovery, episode checks/downloads, scheduling and retention | RSS/Atom subscriptions, OPML import/export, checks, scheduled new-episode downloads, persistent/cancellable jobs, validation, missing-file repair and web/client playback implemented. Browser subscribe/download/play/save/reload verified. Discovery, retention, editing/deletion and full compatibility endpoints pending |
 | Sharing | RSS for books/series/collections, media shares, passwords/expiry/download permissions | Pending |
 | Accounts | Local/SSO authentication, per-user isolation, permissions, API-key lifecycle | Admin mapping/grants, library/tag/explicit permissions, locking, stale-update rejection and account ownership verified; full migration pending |

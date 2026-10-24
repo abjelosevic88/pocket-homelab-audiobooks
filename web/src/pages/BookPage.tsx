@@ -94,7 +94,8 @@ export default function BookPage() {
             {b.explicit && <span className="badge">Explicit</span>}
           </p>
           <div className="book-actions">
-            <button type="button" className="btn primary lg" disabled={b.missing} onClick={() => playingThis ? p.pause() : p.play(b)}>
+            {data.can_read && <Link className="btn primary lg" to={`/read/${encodeURIComponent(b.id)}`}>Read ebook</Link>}
+            <button type="button" className="btn primary lg" disabled={b.missing || !b.duration} onClick={() => playingThis ? p.pause() : p.play(b)}>
               <Icon name={playingThis ? 'pause' : 'play'} size={16} />{playingThis ? 'Pause' : started ? `Continue · ${left({ duration: b.duration, current_time: t }, settings?.speed)}` : b.finished ? 'Listen again' : 'Play'}
             </button>
             <button type="button" className={`btn lg ${data.up_next ? 'on' : ''}`} onClick={upNext} title={data.up_next ? 'On your Up next' : 'Add to Up next'}><Icon name={data.up_next ? 'check' : 'list-ordered'} size={16} />{data.up_next ? 'Up next' : 'Listen later'}</button>

@@ -223,8 +223,22 @@ func (s *Server) nativeAPI(w http.ResponseWriter, r *http.Request, uid int64) {
 						}
 					}
 				}
+				primary := ""
+				if want == "ebook" {
+					if item, e := s.nativeItem(ctx, uid, id); e == nil {
+						primary = nativeString(nativeMap(nativeMap(item["media"])["ebookFile"])["ino"])
+					}
+				}
 				for _, f := range files {
-					if f.Role == want && (len(parts) < 5 || parts[4] == f.ID) {
+					match := f.Role == want
+					if want == "ebook" && len(parts) == 5 && f.Role == "supplement" {
+						ext := strings.ToLower(filepath.Ext(f.Name))
+						match = ext == ".epub" || ext == ".pdf" || ext == ".mobi" || ext == ".azw3" || ext == ".cbr" || ext == ".cbz"
+					}
+					if want == "ebook" && len(parts) < 5 && primary != "" {
+						match = f.ID == primary
+					}
+					if match && (len(parts) < 5 || parts[4] == f.ID) {
 						s.nativeFile(w, r, uid, id, f.ID, want == "ebook")
 						return
 					}

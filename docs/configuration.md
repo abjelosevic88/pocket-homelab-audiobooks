@@ -86,3 +86,24 @@ at connection time; provider credentials are not forwarded to a different host.
 
 Provider contracts: [Open Library search](https://openlibrary.org/dev/docs/api/search)
 and [Google Books API](https://developers.google.com/books/docs/v1/using).
+
+### Native ebook reader
+
+Books with EPUB or PDF files offer **Read ebook**. The reader includes chapter
+navigation, text size, page controls and saved positions. EPUB locations use CFIs,
+and primary ebook positions share the existing client progress contract. Companion
+files keep separate positions. Opening a book never resets its audio position.
+Download permission is required to read or retrieve an ebook.
+
+The browser keeps unacknowledged reading positions per account and retries them.
+If another device changed the position, the reader offers the server position
+instead of overwriting it silently. Account changes invalidate pending writes.
+
+EPUB originals are unchanged. Go prepares a private derived archive, strips active
+content and external URLs, and supplies a restrictive content policy; the browser
+renders it in an iframe with scripts disabled. Archives are limited to 128 MiB
+compressed, 256 MiB expanded, 32 MiB per entry and 10,000 entries. Standard IDPF/Adobe font obfuscation is decoded in the derived copy.
+DRM-encrypted content requires an external reader. PDF.js renders PDF pages
+and selectable text in the browser. Neither reader starts a separate server or
+uses Audiobookshelf. Reader dependencies load only on the reader page; notices
+are at `/reader-licenses.txt`.

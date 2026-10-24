@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"github.com/abjelosevic88/pocket-homelab-audiobooks/internal/ebook"
 	"github.com/abjelosevic88/pocket-homelab-audiobooks/internal/library"
 	"io"
 	"log/slog"
@@ -200,6 +201,42 @@ func TestNativeCatalogSnapshotRehearsal(t *testing.T) {
 		if w.Code != 200 {
 			t.Fatalf("native route %s: %d %s", path, w.Code, w.Body.String())
 		}
+	}
+	if os.Getenv("POCKET_NATIVE_REHEARSAL_EBOOKS") == "1" {
+		rows, e := st.DB.Query(`SELECT item_id,id FROM catalog_files WHERE role IN ('ebook','supplement') AND lower(name) LIKE '%.epub'`)
+		if e != nil {
+			t.Fatal(e)
+		}
+		ebooks := [][2]string{}
+		for rows.Next() {
+			var pair [2]string
+			if e = rows.Scan(&pair[0], &pair[1]); e != nil {
+				rows.Close()
+				t.Fatal(e)
+			}
+			ebooks = append(ebooks, pair)
+		}
+		e = rows.Err()
+		rows.Close()
+		if e != nil {
+			t.Fatal(e)
+		}
+		for _, pair := range ebooks {
+			f, _, e := s.catalog().OpenFile(ctx, uid, pair[0], pair[1], true)
+			if e != nil {
+				t.Errorf("EPUB file %s: %v", pair[1], e)
+				continue
+			}
+			stat, e := f.Stat()
+			if e == nil {
+				e = ebook.Prepare(ctx, f, stat.Size(), io.Discard)
+			}
+			f.Close()
+			if e != nil {
+				t.Errorf("EPUB file %s: %v", pair[1], e)
+			}
+		}
+		t.Logf("Prepared %d imported EPUB files read-only", len(ebooks))
 	}
 	if os.Getenv("POCKET_NATIVE_REHEARSAL_SCAN") == "1" {
 		probe, err := exec.LookPath("ffprobe")

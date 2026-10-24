@@ -368,17 +368,22 @@ func (s *Server) handleBook(w http.ResponseWriter, r *http.Request) {
 	p := prog[id]
 	openURL := strings.TrimRight(ac.public, "/") + "/item/" + id
 	canEdit, canDownload := false, false
+	canRead := false
 	if s.cfg.Backend == "native" {
 		openURL = ""
 		if a, e := s.catalog().Account(ctx, u.ID); e == nil {
 			canEdit, canDownload = a.Permissions.Update, a.Permissions.Download
+			if a.Permissions.Download {
+				files, _, e := s.catalog().EbookFiles(ctx, u.ID, id)
+				canRead = e == nil && len(files) > 0
+			}
 		}
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"book": b, "bookmarks": marks, "series": nz(series), "up_next": inUp, "progress_id": p.ID, "started_at": p.StartedAt,
 		"listened": map[string]any{"seconds": secs, "sessions": len(ls), "first": first},
-		"open_url": openURL, "can_edit": canEdit, "can_download": canDownload, "backend": s.cfg.Backend,
+		"can_read": canRead, "open_url": openURL, "can_edit": canEdit, "can_download": canDownload, "backend": s.cfg.Backend,
 	})
 }
 

@@ -153,18 +153,21 @@ func (s *Server) nativeSocketMessage(ctx context.Context, c *nativeSocket, msg s
 	c.push(socketEvent("init", nativeObject{"userId": a.ID, "username": u.Name}))
 }
 func (s *Server) nativeSocketProgress(ctx context.Context, uid int64, sid string) {
-	progress, err := s.nativeProgress(ctx, uid)
+	session, err := s.catalog().Session(ctx, uid, sid)
 	if err != nil {
 		return
 	}
-	session, err := s.catalog().Session(ctx, uid, sid)
+	s.nativeSocketItemProgress(ctx, uid, session.ItemID, session.EpisodeID, sid, session.Device)
+}
+func (s *Server) nativeSocketItemProgress(ctx context.Context, uid int64, item, episode, sid, device string) {
+	progress, err := s.nativeProgress(ctx, uid)
 	if err != nil {
 		return
 	}
 	var current any
 	for _, v := range progress {
 		p := nativeMap(v)
-		if nativeString(p["libraryItemId"]) == session.ItemID && nativeString(p["episodeId"]) == session.EpisodeID {
+		if nativeString(p["libraryItemId"]) == item && nativeString(p["episodeId"]) == episode {
 			current = p
 			break
 		}
@@ -172,7 +175,7 @@ func (s *Server) nativeSocketProgress(ctx context.Context, uid int64, sid string
 	if current == nil {
 		return
 	}
-	event := socketEvent("user_item_progress_updated", nativeObject{"id": nativeMap(current)["id"], "sessionId": sid, "deviceDescription": session.Device, "data": current})
+	event := socketEvent("user_item_progress_updated", nativeObject{"id": nativeMap(current)["id"], "sessionId": sid, "deviceDescription": device, "data": current})
 	h := s.nativeSockets
 	h.mu.Lock()
 	clients := []*nativeSocket{}

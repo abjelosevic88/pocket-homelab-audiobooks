@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { lazy, Suspense } from 'react'
 import ReactDOM from 'react-dom/client'
 import { BrowserRouter, Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom'
 import './styles/base.css'
@@ -24,6 +24,8 @@ import Lists from './pages/Lists'
 import Podcasts from './pages/Podcasts'
 import Settings from './pages/Settings'
 
+const Reader = lazy(() => import('./pages/Reader'))
+
 function Gate({ children }: { children: React.ReactNode }) {
   const { status, user } = useApp()
   const loc = useLocation()
@@ -44,6 +46,7 @@ function App() {
       <Route path="/login" element={<Login mode="login" />} />
       <Route path="/setup" element={<Login mode="setup" />} />
       <Route element={<Signed />}>
+        <Route path="/read/:id" element={<ErrorBoundary where="reader"><Suspense fallback={<Loading />}><Reader /></Suspense></ErrorBoundary>} />
         <Route path="/settings/:tab?" element={<ErrorBoundary where="settings"><Settings /></ErrorBoundary>} />
         <Route element={<ErrorBoundary where="audiobooks"><Layout /></ErrorBoundary>}>
           <Route path="/" element={<Home />} />

@@ -1,0 +1,19 @@
+.ebook-reader { height: 100dvh; display: flex; flex-direction: column; background: #f8f5ef; color: #202020; }
+.reader-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 12px 18px; background: var(--bg); color: var(--text); border-bottom: 1px solid var(--border); }
+.reader-toolbar strong { flex: 1; min-width: 100px; }
+.reader-toolbar label { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+.reader-toolbar select { max-width: 220px; }
+.reader-toolbar input { width: 64px; }
+.reader-content { flex: 1; min-height: 0; width: 100%; overflow: hidden; }
+.reader-pdf { overflow: auto; padding: 16px; }
+.reader-pdf-page { position: relative; width: fit-content; margin: auto; }
+.reader-pdf canvas { display: block; }
+.reader-pdf .textLayer { position: absolute; top: 0; left: 0; overflow: clip; opacity: 1; line-height: 1; text-align: initial; transform-origin: 0 0; caret-color: CanvasText; }
+.reader-pdf .textLayer :is(span,br) { color: transparent; position: absolute; white-space: pre; cursor: text; transform-origin: 0% 0%; }
+.reader-pdf .textLayer > :not(.markedContent), .reader-pdf .textLayer .markedContent span:not(.markedContent) { z-index: 1; }
+.reader-pdf .textLayer ::selection { background: #0d948855; }
+.ebook-reader footer { justify-content: center; border-top: 1px solid var(--border); }
+@media(max-width: 640px) { .reader-toolbar { padding: 8px; gap: 8px; } .reader-toolbar select { max-width: 140px; } .reader-toolbar strong { flex-basis: 65%; } }
+
+.reader-pdf .textLayer { --min-font-size: 1; --text-scale-factor: calc(var(--total-scale-factor) * var(--min-font-size)); --min-font-size-inv: calc(1 / var(--min-font-size)); }
+.reader-pdf .textLayer > :not(.markedContent), .reader-pdf .textLayer .markedContent span:not(.markedContent) { --font-height: 0; font-size: calc(var(--text-scale-factor) * var(--font-height)); --scale-x: 1; --rotate: 0deg; transform: rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv)); }
