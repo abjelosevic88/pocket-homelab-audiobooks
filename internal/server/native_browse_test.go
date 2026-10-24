@@ -149,3 +149,26 @@ func TestNativeFirstAccountCanUseLibraryWithoutRestart(t *testing.T) {
 		t.Fatal("second account inherited owner access")
 	}
 }
+
+func TestNativeImportedAuthorTimestampSupportsWebPlayback(t *testing.T) {
+	s, h, a, _, _ := nativeHarness(t)
+	_, err := s.store.DB.Exec(`UPDATE catalog_items SET document=json_set(document,'$.authors',json('[{"id":"writer","name":"Writer","updatedAt":"2026-10-24 15:44:14.216 +00:00"}]')) WHERE id='book'`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	item, err := s.nativeItem(context.Background(), a.u.ID, "book")
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := nativeDecodeItem(item)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if decoded.Media.Metadata.Authors[0].UpdatedAt != 1792856654216 {
+		t.Fatal(decoded.Media.Metadata.Authors)
+	}
+	w := call(t, h, a, "POST", "/api/v1/play/book", `{"mime_types":["audio/mpeg"],"client":"test"}`)
+	if w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+}

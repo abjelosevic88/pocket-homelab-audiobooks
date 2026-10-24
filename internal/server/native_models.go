@@ -180,7 +180,15 @@ func (s *Server) nativeItem(ctx context.Context, uid int64, id string) (nativeOb
 	}
 	meta["title"] = it.Title
 	meta["explicit"], meta["abridged"] = nativeBool(m["explicit"]), nativeBool(m["abridged"])
-	meta["authors"] = nativeArray(doc["authors"])
+	authors := nativeArray(doc["authors"])
+	for _, entry := range authors {
+		author := nativeMap(entry)
+		// Imported SQLite entity timestamps are SQL strings; client responses
+		// use milliseconds, including nested authors in expanded book metadata.
+		author["updatedAt"] = nativeMillis(author["updatedAt"])
+		author["addedAt"] = nativeMillis(author["addedAt"])
+	}
+	meta["authors"] = authors
 	meta["series"] = nativeArray(doc["series"])
 	meta["authorName"], meta["authorNameLF"] = it.Author, it.Author
 	narrators := []string{}

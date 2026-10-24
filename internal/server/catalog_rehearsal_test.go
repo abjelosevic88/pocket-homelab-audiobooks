@@ -103,6 +103,26 @@ func TestNativeCatalogSnapshotRehearsal(t *testing.T) {
 		}
 	}
 
+	// Validate every imported book through the typed web contract as well as
+	// the native client's loosely typed JSON. Source entity dates differ.
+	for _, lib := range libs {
+		if lib.MediaType != "book" {
+			continue
+		}
+		items, e := s.nativeItems(ctx, uid, lib.ID)
+		if e != nil {
+			t.Fatal(e)
+		}
+		for _, item := range items {
+			if _, e = nativeDecodeItem(item); e != nil {
+				t.Fatalf("imported web book %v: %v", item["id"], e)
+			}
+		}
+	}
+	if w := get("/api/v1/home", ""); w.Code != 200 {
+		t.Fatalf("native web home: %d %s", w.Code, w.Body.String())
+	}
+
 	podcasts, e := s.catalog().Items(ctx, uid, library.Query{MediaType: "podcast", Limit: 1000})
 	if e != nil {
 		t.Fatal(e)
