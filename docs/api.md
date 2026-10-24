@@ -174,3 +174,16 @@ Native web playback reports accept `report_id`, `observed_at`, `current_time`,
 idempotent. The compatibility `/api/session/{id}/sync` accepts `reportId` and
 `reportedAt` alongside the usual playback fields. Older clients without these
 fields still work, but delta-only retries cannot guarantee exact accounting.
+
+### Native collections and downloads
+
+With the native backend, `/api/collections` and `/api/playlists` support list/create,
+`/{id}` supports read/update/delete, and book/item and batch add/remove routes keep
+ordered contents. Collections are shared within a library and require update
+permission to edit; playlists belong to their creator. Hidden entries cannot be
+silently removed by a restricted editor. Updates accept an optimistic `revision`.
+The web app uses equivalent authenticated `/api/v1/organize/*` routes.
+
+`GET|HEAD /api/items/{id}/download` and
+`GET|HEAD /api/v1/catalog/items/{id}/download` return a streamed ZIP of original
+files, with download permission enforced independently from playback.

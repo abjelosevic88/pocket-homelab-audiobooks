@@ -29,7 +29,7 @@ func mask(s string) string {
 // publicSettings is what one person sees: their settings with secrets masked.
 func (s *Server) publicSettings(ctx context.Context, u *store.User, st store.Settings) map[string]any {
 	return map[string]any{
-		"core_configured": s.core.Configured(), "core_registered": s.coreStatus()["registered"],
+		"backend": s.cfg.Backend, "core_configured": s.core.Configured(), "core_registered": s.coreStatus()["registered"],
 		"title": st.Title, "date_format": st.DateFormat, "time_format": st.TimeFormat,
 		"speed": st.Speed, "skip_back": st.SkipBack, "skip_forward": st.SkipForward, "rewind_on_resume": st.RewindOnResume, "play_next": st.PlayNext,
 		"hidden_libraries": st.HiddenLibraries, "daily_goal": st.DailyGoal,

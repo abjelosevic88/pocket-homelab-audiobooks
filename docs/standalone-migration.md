@@ -1,6 +1,6 @@
 # Standalone Pocket Audiobooks migration
 
-Status: stages 1–2 implemented and rehearsed; the live application still uses
+Status: native playback and core library workflows implemented and rehearsed; the live application still uses
 Audiobookshelf. Full feature parity and cutover are **not complete**.
 
 The owner selected an independent Go implementation, replacing every feature in
@@ -28,7 +28,9 @@ scripts, not by the application at runtime.
    validated uploads, folder creation, metadata/chapter/cover editing and author/
    series associations are implemented. Same-root folder moves retain IDs.
    Provider matching, sidecars, cross-root moves, deletion and bulk tooling remain.
-4. **Remaining feature parity.** Collections/playlists, transcoding and tools,
+4. **Remaining feature parity.** Collection and personal playlist CRUD, ordering,
+   imported associations and streamed original-file ZIP downloads are implemented.
+   Further work includes transcoding and tools,
    ebooks/ereaders, podcast lifecycle, RSS/sharing, account and operations tooling,
    and third-party client protocols. The matrix below is the acceptance scope.
 5. **Final migration and cutover.** Reconcile all data/settings and client behavior,
@@ -93,14 +95,14 @@ as a standalone implementation.
 | Libraries | Multiple libraries/folders; ordering; book and podcast media; access restrictions | Imported browse/access verified; management pending |
 | Scanning | Incremental scan, watcher, manual/rescan, missing files, regrouping, file moves | Incremental/manual scans, polling, missing records and same-root moves verified; regrouping/cross-root moves pending |
 | Book ingestion | Single/multiple audio files, ebooks, tags, sidecars, chapters, covers, track order | Pending |
-| Library management | Uploads, metadata/chapter editing, bulk operations, download, safe deletion | Validated uploads, metadata/chapters/covers and single-file downloads implemented; bulk tools/deletion pending |
+| Library management | Uploads, metadata/chapter editing, bulk operations, download, safe deletion | Validated uploads, metadata/chapters/covers and single-file and streamed book ZIP downloads implemented; bulk tools/deletion pending |
 | Metadata | Built-in/custom providers, matching, covers, authors, series, genres, tags, narrators | Pending |
 | Browse | Search, filters, sorts, pagination, shelves, series and authors | Pending |
 | Playback | Direct/range streaming, multi-file timeline, transcoding/HLS, seeking | Direct/multi-file playback and local seekable FFmpeg/HLS verified |
 | Personal state | Progress, bookmarks, completion, hidden items, history, statistics | Native writes, retries, resume/finish and isolation verified |
 | Device sync | Sessions, handoff, retries, offline reports, conflicts, live updates | Native engine and web outbox verified; legacy delta-only clients need stable report IDs for exact retry accounting |
 | Clients | Native Pocket app API, third-party login, refresh, token streams, Socket.IO | Pending |
-| Organisation | Collections, personal playlists, bulk add/remove/reorder | Pending |
+| Organisation | Collections, personal playlists, bulk add/remove/reorder | Imported associations, CRUD, ordered batch changes and private ownership verified in API/store tests; create/edit verified in the browser |
 | Ebooks | Serving/reading contract, reading progress, companion books, sending to ereaders | Pending |
 | Podcasts | Feeds/OPML, discovery, episode checks/downloads, scheduling and retention | Pending |
 | Sharing | RSS for books/series/collections, media shares, passwords/expiry/download permissions | Pending |

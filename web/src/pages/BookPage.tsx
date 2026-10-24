@@ -1,5 +1,6 @@
 // One book: cover, what it is, your place in it, chapters, bookmarks, the rest of its series.
 import { useEffect, useState } from 'react'
+import { AddToList } from '../components/AddToList'
 import { BookEditor } from '../components/BookEditor'
 import { Link, useParams } from 'react-router-dom'
 import { api, V1 } from '../lib/api'
@@ -22,6 +23,7 @@ export default function BookPage() {
   const { data, setData, error, notConnected, reload } = useApi<BookPageT>(`${V1}/books/${encodeURIComponent(id)}`)
   const [more, setMore] = useState(false)
   const [editing, setEditing] = useState(false)
+  const [organizing, setOrganizing] = useState(false)
   const [confirm, setConfirm] = useState<'' | 'reset' | 'finished'>('')
   useCrumb(data?.book.title)
   useEffect(() => {
@@ -64,6 +66,8 @@ export default function BookPage() {
     b.finished ? { label: 'Mark as not finished', icon: 'undo', onSelect: () => progress('unfinished') } : { label: 'Mark as finished', icon: 'check-circle', onSelect: () => setConfirm('finished') },
     ...(started ? [{ label: 'Take off Continue listening', icon: 'eye-off', onSelect: () => progress('hide') }] : []),
     ...(t > 0 || b.finished ? [{ label: 'Start over', icon: 'rotate-ccw', onSelect: () => setConfirm('reset') }] : []),
+    ...(data.backend === 'native' ? [{ label: 'Add to a list', icon: 'layers', onSelect: () => setOrganizing(true) }] : []),
+    ...(data.can_download ? [{ label: 'Download book', icon: 'download', onSelect: () => { window.location.href = `${V1}/catalog/items/${encodeURIComponent(b.id)}/download` } }] : []),
     ...(data.can_edit ? [{ label: 'Edit book', icon: 'edit', onSelect: () => setEditing(true) }] : []),
     ...(data.open_url ? [{ label: 'Open in Audiobookshelf', icon: 'external', onSelect: () => window.open(data.open_url, '_blank', 'noreferrer') }] : []),
   ]
@@ -173,6 +177,7 @@ export default function BookPage() {
           </section>
         </aside>
       </div>
+      {organizing && <AddToList book={b.id} library={b.library_id} collections={!!data.can_edit} onClose={() => setOrganizing(false)} />}
       {editing && <BookEditor id={id} onClose={() => setEditing(false)} onSaved={() => { void reload() }} />}
       {confirm === 'reset' && <Confirm title="Start over?" message="Your place goes back to the beginning, everywhere (the Audiobookshelf apps too). Your history stays." confirmLabel="Start over" onCancel={() => setConfirm('')} onConfirm={() => { setConfirm(''); progress('reset') }} />}
       {confirm === 'finished' && <Confirm title="Mark as finished?" message="It counts as finished in your stats and leaves Continue listening." confirmLabel="Mark finished" danger={false} onCancel={() => setConfirm('')} onConfirm={() => { setConfirm(''); progress('finished') }} />}

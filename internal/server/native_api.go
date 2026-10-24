@@ -94,6 +94,10 @@ func (s *Server) nativeAPI(w http.ResponseWriter, r *http.Request, uid int64) {
 		respond(nativeObject{"user": me, "userDefaultLibraryId": first, "serverSettings": nativeObject{"authActiveAuthMethods": []string{"local"}}, "Source": "Pocket Audiobooks native"})
 		return
 	}
+	if len(parts) >= 2 && parts[0] == "api" && (parts[1] == "collections" || parts[1] == "playlists") {
+		s.nativeListAPI(w, r, uid, parts[1], parts[2:])
+		return
+	}
 	if path == "/api/libraries" && read {
 		libs, err := s.nativeLibraries(ctx, uid)
 		if err != nil {
@@ -183,6 +187,9 @@ func (s *Server) nativeAPI(w http.ResponseWriter, r *http.Request, uid int64) {
 					s.nativeFile(w, r, uid, id, parts[4], len(parts) == 6)
 					return
 				}
+			case "download":
+				s.nativeDownload(w, r, uid, []string{id})
+				return
 			case "cover", "ebook":
 				files, err := c.Files(ctx, uid, id)
 				if err != nil {
@@ -558,6 +565,25 @@ func (s *Server) nativeLibraryAPI(w http.ResponseWriter, r *http.Request, uid in
 	limit = min(limit, 500)
 	page := max(0, queryInt(r, "page"))
 	switch tail[0] {
+	case "collections", "playlists":
+		lists, err := s.catalog().Lists(ctx, uid, tail[0], lib)
+		if err != nil {
+			s.nativeError(w, err)
+			return
+		}
+		all := []any{}
+		for _, l := range lists {
+			v, err := s.nativeListWire(ctx, uid, l)
+			if err != nil {
+				s.nativeError(w, err)
+				return
+			}
+			all = append(all, v)
+		}
+		start := min(page*limit, len(all))
+		end := min(start+limit, len(all))
+		respond(nativeObject{"results": all[start:end], "total": len(all), "limit": limit, "page": page})
+
 	case "items":
 		if filter := q.Get("filter"); filter != "" {
 			group, value, ok := strings.Cut(filter, ".")

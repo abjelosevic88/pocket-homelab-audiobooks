@@ -262,3 +262,43 @@ func TestNativeBrowserAcceptance(t *testing.T) {
 	}
 	t.Log(string(out))
 }
+
+func TestNativeCollectionAndPlaylistClientRoutes(t *testing.T) {
+	s, h, a, _, tok := nativeHarness(t)
+	if _, err := s.store.DB.Exec(`UPDATE catalog_accounts SET permissions=json_set(permissions,'$.update',json('true')) WHERE pocket_user_id=?`, a.u.ID); err != nil {
+		t.Fatal(err)
+	}
+	collection := jsonObject(t, nativeCall(t, h, tok, "POST", "/api/collections", `{"libraryId":"lib","name":"Favorites","books":["book"]}`))
+	id := nativeString(collection["id"])
+	if len(nativeArray(collection["books"])) != 1 {
+		t.Fatal("collection missing book", collection)
+	}
+	web := jsonObject(t, call(t, h, a, "GET", "/api/v1/organize/collections", ""))
+	if len(nativeArray(web["collections"])) != 1 {
+		t.Fatal("web collection list", web)
+	}
+	library := jsonObject(t, nativeCall(t, h, tok, "GET", "/api/libraries/lib/collections", ""))
+	if nativeNumber(library["total"]) != 1 {
+		t.Fatal("library collections", library)
+	}
+	changed := jsonObject(t, nativeCall(t, h, tok, "PATCH", "/api/collections/"+id, `{"name":"Renamed","revision":1}`))
+	if changed["name"] != "Renamed" {
+		t.Fatal(changed)
+	}
+	if w := nativeCall(t, h, tok, "PATCH", "/api/collections/"+id, `{"name":"Stale","revision":1}`); w.Code != 409 {
+		t.Fatalf("stale list edit %d", w.Code)
+	}
+	removed := jsonObject(t, nativeCall(t, h, tok, "DELETE", "/api/collections/"+id+"/book/book", ""))
+	if len(nativeArray(removed["books"])) != 0 {
+		t.Fatal("remove book", removed)
+	}
+	jsonObject(t, nativeCall(t, h, tok, "POST", "/api/collections/"+id+"/batch/add", `{"books":["book"]}`))
+	playlist := jsonObject(t, nativeCall(t, h, tok, "POST", "/api/playlists", `{"libraryId":"lib","name":"Listen later","items":[{"libraryItemId":"book"}]}`))
+	if len(nativeArray(playlist["items"])) != 1 {
+		t.Fatal("playlist", playlist)
+	}
+	jsonObject(t, nativeCall(t, h, tok, "DELETE", "/api/collections/"+id, ""))
+	if w := call(t, h, a, "GET", "/api/v1/books/book", ""); w.Code != 200 {
+		t.Fatal("deleting list removed book")
+	}
+}

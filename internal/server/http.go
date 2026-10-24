@@ -43,6 +43,8 @@ func (s *Server) Router() http.Handler {
 			r.Head("/catalog/items/{id}/files/{file}", s.handleCatalogFile)
 			r.Post("/upload", s.handleUpload)
 			r.Post("/catalog/items/{id}/cover", s.nativeCoverUpload)
+			r.Get("/catalog/items/{id}/download", s.nativeDownloadBook)
+			r.Head("/catalog/items/{id}/download", s.nativeDownloadBook)
 			r.Get("/media/*", s.handleMedia)
 			r.Head("/media/*", s.handleMedia)
 			r.Get("/cover/{id}", s.handleCover)
@@ -74,6 +76,7 @@ func (s *Server) Router() http.Handler {
 				r.Get("/dashboard", s.handleDashboard)
 				r.Get("/day/{date}", s.handleDay)
 
+				r.HandleFunc("/organize/*", s.nativeOrganize)
 				r.Get("/catalog/manage", s.nativeManage)
 				r.Post("/catalog/libraries", s.nativeLibraryCreate)
 				r.Get("/catalog/items/{id}/editor", s.nativeEditor)

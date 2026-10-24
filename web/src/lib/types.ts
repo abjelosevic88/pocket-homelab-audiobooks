@@ -14,7 +14,7 @@ export interface Book {
 }
 export interface Bookmark { libraryItemId: string; title: string; time: number; createdAt: number }
 export interface BookPage {
- can_edit?: boolean; backend?: string
+ can_edit?: boolean; can_download?: boolean; backend?: string
   book: Book; bookmarks: Bookmark[]; series: { id: string; name: string; sequence: string; books: Book[] }[]; up_next: boolean; progress_id?: string; started_at?: number
   listened: { seconds: number; sessions: number; first: string }; open_url: string
 }
@@ -59,6 +59,7 @@ export interface Connection {
 }
 
 export interface Settings {
+ backend?: string
   core_configured: boolean; core_registered?: boolean; title: string; date_format: string; time_format: string
   speed: number; skip_back: number; skip_forward: number; rewind_on_resume: number; play_next: boolean; hidden_libraries: string; daily_goal: number
   notify_url: string; notify_format: string; notify_finished: boolean; notify_weekly: boolean; notify_configured: boolean

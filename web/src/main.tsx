@@ -20,6 +20,7 @@ import AuthorPage from './pages/AuthorPage'
 import UpNext from './pages/UpNext'
 import History from './pages/History'
 import Stats from './pages/Stats'
+import Lists from './pages/Lists'
 import Settings from './pages/Settings'
 
 function Gate({ children }: { children: React.ReactNode }) {
@@ -54,6 +55,7 @@ function App() {
           <Route path="/up-next" element={<UpNext />} />
           <Route path="/history" element={<History />} />
           <Route path="/stats" element={<Stats />} />
+          <Route path="/lists" element={<Lists />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Route>

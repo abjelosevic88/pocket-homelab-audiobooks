@@ -15,8 +15,8 @@ import (
 	"time"
 )
 
-var ErrInvalid = errors.New("invalid playback request")
-var ErrConflict = errors.New("report identifier already used with different contents")
+var ErrInvalid = errors.New("invalid request")
+var ErrConflict = errors.New("update conflicts with saved data; refresh and try again")
 var ErrNoAudio = errors.New("this item has no playable audio")
 
 func newID() string               { return "native-" + rand.Text() }
