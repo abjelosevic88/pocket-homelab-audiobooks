@@ -249,7 +249,7 @@ function Notifications() {
         sub={<>Apprise gateway (<code>…/notify/&lt;key&gt;</code>), an ntfy topic URL, or any webhook that takes JSON.</>}>
         <SettingRow title="URL" stack><input value={f.notify_url} onChange={e => setF({ ...f, notify_url: e.target.value })} placeholder="http://apprise:8000/notify/audiobooks" /></SettingRow>
         <SettingRow title="Format"><Segmented value={f.notify_format} onChange={v => setF({ ...f, notify_format: v })} options={[{ value: 'apprise', label: 'Apprise' }, { value: 'ntfy', label: 'ntfy' }, { value: 'json', label: 'JSON' }]} size="sm" /></SettingRow>
-        <SettingRow title="A book is finished" help="Wherever you finished it: here or in an Audiobookshelf app."><Switch checked={f.notify_finished} onChange={v => setF({ ...f, notify_finished: v })} label="Push finished books" /></SettingRow>
+        <SettingRow title="A book is finished" help="Wherever you finished it: here or in a connected player."><Switch checked={f.notify_finished} onChange={v => setF({ ...f, notify_finished: v })} label="Push finished books" /></SettingRow>
         <SettingRow title="Weekly recap" help="Monday morning: how much you listened, on how many days, the book you heard most."><Switch checked={f.notify_weekly} onChange={v => setF({ ...f, notify_weekly: v })} label="Weekly recap" /></SettingRow>
       </Section>
       <div className="row wrap">

@@ -28,14 +28,14 @@ export default function History() {
   }
   return (
     <div>
-      <PageHeader title="History" sub={data ? `${data.total.toLocaleString()} listening sessions, here and in every Audiobookshelf app` : ' '}
+      <PageHeader title="History" sub={data ? `${data.total.toLocaleString()} listening sessions, here and in your connected players` : ' '}
         actions={<Link to="/stats" className="btn sm"><Icon name="bar" size={14} />Stats</Link>} />
       <div className="toolbar row wrap">
         <div className="search-box"><Icon name="search" size={15} /><input value={q} onChange={e => setQ(e.target.value)} placeholder="Find a book, author or narrator" aria-label="Filter history" /></div>
         {book && <button type="button" className="chip on" onClick={() => { const n = new URLSearchParams(sp); n.delete('book'); setSp(n, { replace: true }) }}>One book<Icon name="x" size={12} /></button>}
       </div>
       {error && <div className="callout danger"><Icon name="alert" size={15} />{error}</div>}
-      {!data ? <Loading /> : data.items.length === 0 ? <Empty title="Nothing listened yet" icon="history">What you listen to here and in the Audiobookshelf apps shows up within a few minutes.</Empty> : (
+      {!data ? <Loading /> : data.items.length === 0 ? <Empty title="Nothing listened yet" icon="history">What you listen to here and in your connected players appears in your history.</Empty> : (
         <div className="history">
           {days.map(([day, ls]) => (
             <section key={day} className="h-day">
@@ -51,7 +51,7 @@ export default function History() {
                     <span className="tnum">{hours(l.seconds)}</span>
                     <span title={l.device || (l.source === 'pocket' ? 'Pocket Audiobooks' : 'Audiobookshelf')}>{fmtISOTime(l.started_at)}{l.device ? ` · ${l.device.split(' · ')[0]}` : ''}</span>
                   </span>
-                  <button type="button" className="btn ghost icon-only xs h-del" aria-label="Remove from history" title="Remove from the history here (Audiobookshelf keeps its own)" onClick={() => remove(l)}><Icon name="x" size={14} /></button>
+                  <button type="button" className="btn ghost icon-only xs h-del" aria-label="Remove from history" title="Remove from your listening history" onClick={() => remove(l)}><Icon name="x" size={14} /></button>
                 </div>
               ))}
             </section>

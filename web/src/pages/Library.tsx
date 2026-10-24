@@ -52,7 +52,7 @@ export default function Library({ view }: { view: 'books' | 'series' | 'authors'
   if (notConnected) return <NotConnected message={notConnected} />
   if (error) return <div className="callout danger"><Icon name="alert" size={15} />{error}</div>
   if (!libs) return <Loading />
-  if (!libs.length) return <Empty title="No book libraries" icon="book">Audiobookshelf has no book library you can open (podcast libraries belong to Pocket Podcasts), or you hid them all in Settings.</Empty>
+  if (!libs.length) return <Empty title="No book libraries" icon="book">No book library is available to your account. Add one in Settings, or check which libraries are hidden.</Empty>
   return (
     <div>
       <PageHeader title={view === 'books' ? 'Books' : view === 'series' ? 'Series' : 'Authors'} sub={lib ? lib.name : ''} actions={<div className="row wrap"><LibraryPicker libs={libs} lib={lib} pick={pick} /><button className="btn" onClick={() => setRevision(n => n + 1)}>Refresh</button><button className="btn primary" onClick={() => setUploading(true)}><Icon name="upload" size={16} />Upload</button></div>} />
@@ -154,7 +154,7 @@ function Series({ lib }: { lib: string }) {
         <Select ariaLabel="Sort" value={sort} onChange={v => { setSort(v); localStorage.setItem('pab-series-sort', v) }} options={[{ value: 'name', label: 'Name' }, { value: 'added', label: 'Recently added' }, { value: 'books', label: 'Most books' }, { value: 'length', label: 'Longest' }]} />
       </div>
       {err && <div className="callout danger"><Icon name="alert" size={15} />{err.msg}</div>}
-      {total === 0 ? <Empty title="No series" icon="layers">Books with a series in Audiobookshelf show up here.</Empty> : <div className="grid-covers">{items.map(s => <SeriesTile key={s.id} s={s} />)}</div>}
+      {total === 0 ? <Empty title="No series" icon="layers">Books with series metadata show up here.</Empty> : <div className="grid-covers">{items.map(s => <SeriesTile key={s.id} s={s} />)}</div>}
       <div ref={more} className="more-sentinel">{busy && <Loading label="" />}</div>
     </>
   )

@@ -57,7 +57,7 @@ export default function Home() {
       {h.discover.length > 0 && <Shelf title="From your shelves" sub="Books you haven't started" to="/library?show=not-started&sort=random">{h.discover.map(b => <BookCard key={b.id} b={b} />)}</Shelf>}
       {h.listen_again.length > 0 && <Shelf title="Listen again" to="/library?show=finished">{h.listen_again.map(b => <BookCard key={b.id} b={b} sub={b.author} />)}</Shelf>}
       {h.authors.length > 0 && <Shelf title="Newest authors" to="/library/authors">{h.authors.map(a => <AuthorTile key={a.id} a={a} />)}</Shelf>}
-      {empty && <div className="empty big"><span className="empty-ico"><Icon name="book" size={22} /></span><h3>No books yet</h3><p className="muted">Your Audiobookshelf libraries are empty, or all hidden in Settings → Audiobookshelf.</p></div>}
+      {empty && <div className="empty big"><span className="empty-ico"><Icon name="book" size={22} /></span><h3>No books yet</h3><p className="muted">Add a library in Settings, then scan your folders or upload a book.</p></div>}
       {p.remote && !p.remoteVisible && p.remote.playing && <p className="muted small">Also playing on {p.remote.device}: {p.remote.title}</p>}
     </div>
   )

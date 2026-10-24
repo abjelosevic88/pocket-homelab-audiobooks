@@ -19,7 +19,7 @@ export default function Stats() {
   const { data: s, error } = useApi<StatsT>(`${V1}/stats?range=${range}`)
   return (
     <div>
-      <PageHeader title="Stats" sub="What you listened to, here and in every Audiobookshelf app."
+      <PageHeader title="Stats" sub="What you listened to, here and in your connected players."
         actions={<Segmented size="sm" value={range} onChange={setRange} options={[{ value: '7d', label: 'Week' }, { value: '30d', label: 'Month' }, { value: '90d', label: '3 months' }, { value: String(year), label: String(year) }, { value: 'all', label: 'All time' }]} />} />
       {error && <div className="callout danger"><Icon name="alert" size={15} />{error}</div>}
       {!s ? <Loading /> : s.totals.sessions === 0 && s.finished === 0 ? <Empty title="Nothing listened in this period" icon="bar" /> : <>

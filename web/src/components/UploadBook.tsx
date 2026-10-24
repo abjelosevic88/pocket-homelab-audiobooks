@@ -66,9 +66,9 @@ export function UploadBook({ library, onClose, onUploaded }: { library?: string;
   }
   return <Modal title="Upload audiobook" onClose={close}>
     {error || notConnected ? <p className="callout danger" role="alert">{error || notConnected}</p> : !data ? <Loading /> : !data.allowed ?
-      <p>Your Audiobookshelf account does not have upload permission. An Audiobookshelf administrator can enable it for you.</p> : done ?
-      <div className="stack"><p>Upload complete. Your files are saved in <b>{lib?.name}</b>. The book will appear once Audiobookshelf finishes scanning.</p><button className="btn primary" onClick={close}>Done</button></div> : !data.libraries.length ?
-      <p>No book libraries are available for upload. Add one in Audiobookshelf first.</p> :
+      <p>Your account does not have upload permission. A library administrator can enable it for you.</p> : done ?
+      <div className="stack"><p>Upload complete. Your files are saved in <b>{lib?.name}</b>. The book will appear in your library after processing.</p><button className="btn primary" onClick={close}>Done</button></div> : !data.libraries.length ?
+      <p>No book libraries are available for upload. Add a book library in Settings first.</p> :
       <form onSubmit={submit} className="stack">
         <p className="muted">Choose the audio files for one book. You can include a cover or ebook alongside them.</p>
         <fieldset disabled={busy} className="upload-fields stack">

@@ -198,7 +198,7 @@ export default function BookPage() {
       {sharing && <ShareDialog kind="item" target={id} name={b.title} onClose={()=>setSharing(false)} />}
       {organizing && <AddToList book={b.id} library={b.library_id} collections={!!data.can_edit} onClose={() => setOrganizing(false)} />}
       {editing && <BookEditor id={id} onClose={() => setEditing(false)} onSaved={() => { void reload() }} />}
-      {confirm === 'reset' && <Confirm title="Start over?" message="Your place goes back to the beginning, everywhere (the Audiobookshelf apps too). Your history stays." confirmLabel="Start over" onCancel={() => setConfirm('')} onConfirm={() => { setConfirm(''); progress('reset') }} />}
+      {confirm === 'reset' && <Confirm title="Start over?" message="Your place goes back to the beginning in all connected players. Your history stays." confirmLabel="Start over" onCancel={() => setConfirm('')} onConfirm={() => { setConfirm(''); progress('reset') }} />}
       {confirm === 'finished' && <Confirm title="Mark as finished?" message="It counts as finished in your stats and leaves Continue listening." confirmLabel="Mark finished" danger={false} onCancel={() => setConfirm('')} onConfirm={() => { setConfirm(''); progress('finished') }} />}
     </div>
   )

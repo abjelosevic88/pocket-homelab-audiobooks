@@ -1,5 +1,5 @@
 [Unit]
-Description=Pocket Audiobooks — audiobooks for the household, on top of Audiobookshelf
+Description=Pocket Audiobooks — standalone audiobooks for the household
 After=network-online.target
 Wants=network-online.target
 

@@ -144,10 +144,10 @@ export function NotConnected({ message }: { message: string }) {
   return (
     <div className="empty big">
       <span className="empty-ico"><Icon name="headphones" size={22} /></span>
-      <h3>Connect your Audiobookshelf</h3>
+      <h3>Set up library access</h3>
       <p className="muted" style={{ maxWidth: 460 }}>{message}</p>
-      <p className="muted small" style={{ maxWidth: 460 }}>Pocket Audiobooks plays your books with your own Audiobookshelf account, so your place, finished books and bookmarks stay yours — and the Audiobookshelf apps on your phone agree.</p>
-      <Link to="/settings/audiobookshelf" className="btn primary"><Icon name="settings" size={15} />Settings → Audiobookshelf</Link>
+      <p className="muted small" style={{ maxWidth: 460 }}>Check your library access in Settings. Your place, finished books and bookmarks belong to your account.</p>
+      <Link to="/settings/audiobookshelf" className="btn primary"><Icon name="settings" size={15} />Open Settings</Link>
     </div>
   )
 }
