@@ -538,7 +538,7 @@ body.player-open pocket-ask-launcher:not([open]) { display: none; }
 .book-meta > span { display: inline-flex; align-items: center; gap: 5px; }
 .book-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 8px 0 2px; }
 .badge.lgbadge { height: 30px; padding: 0 12px; display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; }
-.book-progress { display: flex; align-items: center; gap: 10px; max-width: 460px; }
+.book-progress { display: flex; align-items: center; gap: 10px; width: 100%; max-width: 460px; }
 .book-progress .progress { flex: 0 0 160px; }
 .book-genres { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 0; }
 .book-genres .chip { text-decoration: none; }
@@ -557,7 +557,9 @@ body.player-open pocket-ask-launcher:not([open]) { display: none; }
 @media (max-width: 767px) {
   .book-hero { flex-direction: column; align-items: center; text-align: center; padding-top: 10px; gap: 18px; }
   .book-cover { width: 200px; }
-  .book-text { align-items: center; }
+  .book-text { align-items: center; width: 100%; }
+  .book-progress { flex-direction: column; gap: 6px; }
+  .book-progress .progress { flex: none; width: min(100%, 240px); }
   .book-meta, .book-actions, .book-genres { justify-content: center; }
 }
 

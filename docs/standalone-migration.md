@@ -1,6 +1,6 @@
 # Standalone Pocket Audiobooks migration
 
-Status: final validation and cutover in progress; production still uses Audiobookshelf until the final snapshot is imported.
+Status: standalone production cutover completed on 2026-10-24. Pocket Audiobooks 1.0.0 uses the native Go backend; Audiobookshelf is stopped with automatic restart disabled. Original source data is retained for recovery.
 
 ## Accepted scope (updated 2026-10-24)
 
@@ -19,40 +19,40 @@ file regrouping and exact third-party-client parity are outside this release.
 The historical parity matrix below records implementation coverage; pending rows
 are no longer a requirement to recreate every Audiobookshelf feature.
 
-## Stages and current evidence
+## Release evidence
 
-1. **Native catalog and migration foundation (implemented).** New SQLite tables,
-   transactional import from a read-only snapshot, explicit account mapping,
-   stable source IDs, permission-filtered browse/progress reads, and local file
-   serving with range/HEAD requests. This stage is additive and does not switch
-   the existing web/native players.
-2. **Native playback and progress (implemented behind `MEDIA_BACKEND=native`).**
-   Durable sessions, multi-file timelines, bookmarks, resume/finish, history,
-   stable report receipts, device handoff, web retry outbox, local FFmpeg/HLS,
-   and Socket.IO v4 WebSocket/polling. The existing web routes and client API
-   dispatch into Go handlers in-process. The compatibility adapter makes no
-   upstream requests. Actual phone-app acceptance and the remaining endpoints
-   in the matrix are still required before cutover.
-3. **Library ingestion and editing (core workflow implemented).** Incremental
-   scans, configurable polling for changes, persistent/cancellable scan jobs,
-   validated uploads, folder creation, metadata/chapter/cover editing and author/
-   series associations are implemented. Same-root folder moves retain IDs.
-   JSON/legacy metadata.abs/description/narrator sidecars are read for new books, and explicit sidecar
-   imports preserve ordinary manual edits. Scans reject concurrent edits. Provider
-   matching and cross-root moves remain. Atomic bulk metadata editing is implemented. Recoverable deletion is implemented.
-4. **Remaining feature parity.** Collection and personal playlist CRUD, ordering,
-   imported associations and streamed original-file ZIP downloads are implemented.
-   Further work includes transcoding and tools,
-   ebooks/ereaders, podcast lifecycle, RSS/sharing, account and operations tooling,
-   and third-party client protocols. The matrix below is the acceptance scope.
-5. **Final migration and cutover.** Reconcile all data/settings and client behavior,
-   preserve rollback state, switch routing, and verify with the old server stopped.
+The final import ran while both old services were stopped, using fresh consistent
+SQLite snapshots. It retained all 1,506 books, 11 existing podcast items, 77 episodes,
+five libraries, 151 authors and 226 series. Only root was mapped: nine progress
+records and 63 listening sessions. Saved positions and finished flags were compared
+exactly with the frozen source. No source credentials or excluded personal state
+were imported into the native catalog.
+
+Production acceptance with Audiobookshelf stopped includes:
+
+- Pocket Homelab's actual Swift client using a newly paired Core device token over
+  HTTPS: library, author/series/search, detail, progress, history and overview reads.
+  The same client also passed play/sync/close/bookmarks against the isolated import.
+- The web contract decodes every imported book; source SQL author dates are
+  normalized to numeric API timestamps. Live covers, direct byte ranges and local
+  FFmpeg HLS generation/segment delivery pass.
+- Day's Core connection test, Bookshelf's sync and the existing Homepage widget pass.
+- A fresh live application backup passes checksum/integrity verification, and
+  Pocket Backups successfully captures the native SQLite database.
+- Synthetic browser acceptance covers listening, pause/save, chapters, uploads,
+  scanning, metadata/covers, permissions, lists, downloads and recovery features.
+
+The native implementation is the default. Legacy backend code and the stopped
+source installation are recovery aids, not runtime dependencies. Specialized parity
+items in the historical matrix below are outside the agreed standard audiobook scope.
+
+## Historical staged rehearsals
 
 The first rehearsal imported a private snapshot into a separate staging database:
 1,506 books, 11 podcasts, 77 episodes, five libraries, 151 authors, 226 series,
 11 progress records and 92 listening sessions. The native catalog holds all three
 source accounts; only the one identity proven by Pocket's existing sync mapping
-was bound to a Pocket account. The owner subsequently requested that only `root` migrate. The final import will
+was bound to a Pocket account. The owner subsequently requested that only `root` migrate. The final import did
 explicitly exclude `fika` and `raycast`, including their personal state and owned lists;
 the rehearsal snapshot still contains the original accounts. No source passwords, tokens or email addresses
 were loaded into the catalog accounts table.
@@ -127,10 +127,10 @@ Audiobookshelf-parity claim is made.
 | Ebooks | Serving/reading contract, reading progress, companion books, sending to ereaders | EPUB/PDF web reading, chapter navigation, text size, EPUB CFI/PDF page resume, separate companion positions, optimistic conflict checks, durable browser saves and original-file client downloads implemented. Browser EPUB/PDF save/reload verified. Ereader delivery and remaining formats/tools pending |
 | Podcasts | Feeds/OPML, discovery, episode checks/downloads, scheduling and retention | RSS/Atom subscriptions, OPML import/export, checks, scheduled new-episode downloads, persistent/cancellable jobs, validation, missing-file repair and web/client playback implemented. Browser subscribe/download/play/save/reload verified. Recoverable keep-latest retention, episode/show deletion, Apple Podcasts search and persistent episode metadata/chapter editing implemented. Calendar schedules/timezones, download limits and failure/restart recovery implemented and imported. Client feed preview, creation, OPML parsing, checks, search, queue and episode read/edit/delete routes implemented; bulk import/matching and remaining library compatibility routes pending |
 | Sharing | RSS for books/series/collections, media shares, passwords/expiry/download permissions | Native RSS and share pages for books, series, collections and podcast episodes; password grants, expiry/revocation, current publisher permissions, per-episode media boundaries, original downloads and HLS fallback implemented. Browser create/play/resume/RSS/revoke and protocol isolation tests pass; source snapshot has no published feeds |
-| Accounts | Local/SSO authentication, per-user isolation, permissions, API-key lifecycle | Admin mapping/grants, library/tag/explicit permissions, locking, stale-update rejection and account ownership verified; full migration pending |
+| Accounts | Local/SSO authentication, per-user isolation, permissions, API-key lifecycle | Admin mapping/grants, library/tag/explicit permissions, locking, stale-update rejection and account ownership verified; root-only migration completed |
 | Tools | Metadata embedding, M4B conversion, jobs, cancellation, status | Mixed-format M4B generation, lossless single-file metadata embedding, progress/cancellation/restart, checksummed output and recoverable adoption implemented; originals and personal state retained |
 | Operations | Backups/restore, logging, cache management, settings and notifications | Checksummed application bundles, safe verification/restore into a new directory, managed-art/credential recovery and database snapshots implemented; external media snapshots remain separate. Other operations parity pending |
-| Pocket integrations | Core pairing, Day, Bookshelf, Homepage, notifications and backup plans | Existing interfaces; standalone verification pending |
+| Pocket integrations | Core pairing, Day, Bookshelf, Homepage, notifications and backup plans | Core paired client, Day, Bookshelf and Homepage verified against native production |
 
 Use the installed server's router/controllers and native app service client as
 contract evidence. Do not assume a gateway allowlist describes the entire server.
@@ -182,8 +182,8 @@ Without `--apply`, the importer validates all rows and database constraints in a
 transaction, then rolls back the catalog data. Opening a target database still
 applies the application's schema migrations. With `--apply`, catalog data commits
 atomically. An existing catalog is refused, including repeat imports: there is
-no automatic merge or overwrite. A final delta/reconciliation workflow is still
-required before live cutover.
+no automatic merge or overwrite. For cutover, pause writes on both old services and
+import fresh snapshots; do not promote a rehearsal containing test progress.
 
 The importer preserves library/item metadata, files, author/series relationships,
 podcast episodes, collections/playlists, accounts/permissions, progress, bookmarks
@@ -246,9 +246,8 @@ history but cannot overwrite the new device's position. The browser persists
 pending reports per Pocket user until acknowledged. Third-party clients that
 only send deltas without stable IDs cannot have exact retry accounting guaranteed.
 
-The backend switch is an implementation/testing option, **not yet a production
-cutover instruction**. Several client
-endpoints, metadata providers and advanced library tools and the other rows marked pending still require independent services.
+The native backend is now the production default. Specialized compatibility and
+provider features marked pending are outside the accepted release scope.
 
 ```sh
 node scripts/test-playback-outbox.mjs
@@ -289,8 +288,8 @@ POCKET_NATIVE_BROWSER_CDP=http://127.0.0.1:9222 \
 
 Add `POCKET_NATIVE_REHEARSAL_SCAN=1` to the snapshot rehearsal command to exercise
 scanning against a disposable database copy. Source media remains read-only.
-FFprobe must be on PATH. The native backend remains opt-in and has not been
-switched on in production. All pending rows in the feature matrix still apply.
+FFprobe must be on PATH. The native backend is enabled in production. Pending
+parity rows are historical scope notes, not unfinished standard audiobook work.
 
 ## Recoverable deletion and podcast retention
 

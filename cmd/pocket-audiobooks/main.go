@@ -1,8 +1,6 @@
-// Command pocket-audiobooks is a self-hosted app for audiobooks on top of
-// Audiobookshelf: a web player for the whole household that keeps each
-// person's place in step with the Audiobookshelf apps, series and authors,
-// up next, and a listening history it owns with stats. One binary, one
-// SQLite file.
+// Command pocket-audiobooks runs a standalone Go audiobook library and player.
+// It owns the catalog, playback, progress and history in SQLite and serves
+// the web app and compatible Pocket Homelab clients without an upstream server.
 package main
 
 import (
@@ -49,7 +47,7 @@ func main() {
 			runResetPassword(os.Args[2:])
 			return
 		case "help", "--help", "-h":
-			fmt.Println(`pocket-audiobooks — your audiobooks, for the whole household (on top of Audiobookshelf)
+			fmt.Println(`pocket-audiobooks — standalone audiobooks for the whole household
 
 Usage:
   pocket-audiobooks                     start the server (default)
