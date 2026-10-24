@@ -78,6 +78,8 @@ func (s *Server) Router() http.Handler {
 
 				r.HandleFunc("/organize/*", s.nativeOrganize)
 				r.Get("/catalog/manage", s.nativeManage)
+				r.Get("/catalog/accounts", s.nativeAccounts)
+				r.Put("/catalog/accounts", s.nativeAccounts)
 				r.Post("/catalog/libraries", s.nativeLibraryCreate)
 				r.Get("/catalog/items/{id}/editor", s.nativeEditor)
 				r.Put("/catalog/items/{id}/editor", s.nativeEditor)

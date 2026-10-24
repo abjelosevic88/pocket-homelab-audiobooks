@@ -29,6 +29,10 @@ try {
   await page.locator('.book-title').filter({ hasText: 'Edited in browser' }).waitFor()
   await page.goto(process.env.BASE + '/settings/audiobookshelf')
   await page.getByRole('heading', { name: 'Libraries', exact: true }).waitFor()
+  await page.getByRole('button', { name: 'Edit access', exact: true }).first().click()
+  await page.getByLabel('Account name', { exact: true }).fill('Browser listener')
+  await page.getByRole('button', { name: 'Save access', exact: true }).click()
+  await page.getByText('Library access saved', { exact: true }).waitFor()
   await page.getByRole('button', { name: 'Scan library', exact: true }).click()
   await page.waitForFunction(() => [...document.querySelectorAll('[role="status"]')].some(e => e.textContent.includes('complete')))
   // Upload through the actual web API using a real file, then browse the result.
@@ -52,5 +56,5 @@ try {
   await page.getByRole('button', { name: 'Save list', exact: true }).click()
   await page.getByRole('heading', { name: 'Renamed collection', exact: true }).waitFor()
   assert.deepEqual(errors, [])
-  console.log('Native browser acceptance passed: play, pause/save, metadata edit, scan, upload, browse and collection editing.')
+  console.log('Native browser acceptance passed: play, pause/save, metadata edit, scan, upload, browse, account access and collection editing.')
 } finally { await context.close(); await browser.close() }

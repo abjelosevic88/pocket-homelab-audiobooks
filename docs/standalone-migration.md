@@ -108,7 +108,7 @@ as a standalone implementation.
 | Ebooks | Serving/reading contract, reading progress, companion books, sending to ereaders | Pending |
 | Podcasts | Feeds/OPML, discovery, episode checks/downloads, scheduling and retention | Pending |
 | Sharing | RSS for books/series/collections, media shares, passwords/expiry/download permissions | Pending |
-| Accounts | Local/SSO authentication, per-user isolation, permissions, API-key lifecycle | Explicit mappings and restrictions verified; full migration pending |
+| Accounts | Local/SSO authentication, per-user isolation, permissions, API-key lifecycle | Admin mapping/grants, library/tag/explicit permissions, locking, stale-update rejection and account ownership verified; full migration pending |
 | Tools | Metadata embedding, M4B conversion, jobs, cancellation, status | Pending |
 | Operations | Backups/restore, logging, cache management, settings and notifications | Pending |
 | Pocket integrations | Core pairing, Day, Bookshelf, Homepage, notifications and backup plans | Existing interfaces; standalone verification pending |
