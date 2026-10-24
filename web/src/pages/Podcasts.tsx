@@ -12,8 +12,8 @@ import { Loading, errMsg, useToast } from '../components/ui'
 type Show = { id: string; title: string; author: string; library_id: string }
 type Library = { id: string; name: string; folders: { id: string; fullPath?: string; path?: string }[] }
 type Episode = { id: string; title: string; publishedAt: number; downloaded: boolean; in_trash: boolean; job_id?: string; status?: string; error?: string }
-type Settings = { auto_download: boolean; interval_seconds: number; max_new: number; keep_latest: number }
-type Detail = { item: Show; episodes: Episode[]; settings: Settings; can_manage: boolean; can_delete: boolean; error: string; last_check: number }
+type Settings = { auto_download: boolean; interval_seconds: number; max_new: number; keep_latest: number; schedule: string; timezone: string }
+type Detail = { has_feed: boolean; item: Show; episodes: Episode[]; settings: Settings; can_manage: boolean; can_delete: boolean; error: string; last_check: number }
 export default function Podcasts() {
   const { id } = useParams()
   const {user}=useApp()
@@ -52,13 +52,15 @@ export default function Podcasts() {
       {editing&&<EpisodeEditor item={id} id={editing} onClose={()=>setEditing(undefined)} onSaved={()=>{setEditing(undefined);void load()}}/>}
       {sharing && <ShareDialog kind="item" target={id} episode={sharing.id} name={sharing.title} onClose={()=>setSharing(undefined)} />}
       {detail.can_manage && <details><summary>Subscription settings</summary><form className="stack mt" onSubmit={e => { e.preventDefault(); void act(() => api.put(`${V1}/podcasts/${encodeURIComponent(id)}/settings`, settings)) }}>
-        <label><input type="checkbox" checked={settings.auto_download} onChange={e => setSettings({ ...settings, auto_download: e.target.checked })} /> Download newly published episodes automatically</label>
-        <label>Check every <select value={settings.interval_seconds} onChange={e => setSettings({ ...settings, interval_seconds: Number(e.target.value) })}><option value={300}>5 minutes</option><option value={3600}>hour</option><option value={21600}>6 hours</option><option value={86400}>day</option></select></label>
+        <label><input type="checkbox" disabled={!detail.has_feed} checked={settings.auto_download} onChange={e => setSettings({ ...settings, auto_download: e.target.checked })} /> Download newly published episodes automatically</label>
+        <label>Check every (when no calendar schedule is set) <select disabled={!!settings.schedule} value={settings.interval_seconds} onChange={e => setSettings({ ...settings, interval_seconds: Number(e.target.value) })}><option value={300}>5 minutes</option><option value={3600}>hour</option><option value={21600}>6 hours</option><option value={86400}>day</option></select></label>
+        <label>Calendar schedule (optional)<input value={settings.schedule} placeholder="0 * * * *" onChange={e=>setSettings({...settings,schedule:e.target.value})}/></label><p className="small muted">Five cron fields: minute, hour, day, month, weekday. An optional first field specifies seconds. Clear this to use the interval above.</p>
+        <label>Schedule timezone<input value={settings.timezone} placeholder="Europe/Sarajevo" onChange={e=>setSettings({...settings,timezone:e.target.value})}/></label>
         <label>Maximum new episodes per check<input type="number" min={1} max={100} value={settings.max_new} onChange={e => setSettings({ ...settings, max_new: Number(e.target.value) })} /></label>
         <label>Keep latest downloaded episodes (0 keeps all)<input type="number" min={0} max={10000} disabled={!detail.can_delete} value={settings.keep_latest} onChange={e=>setSettings({...settings,keep_latest:Number(e.target.value)})}/></label><p className="small muted">Older downloads move to recoverable Trash. Permanently remove them there to free disk space. Recently active playback is protected.</p>
         <button className="btn primary" disabled={busy}>Save subscription settings</button>
       </form></details>}
-      {detail.can_manage && <button type="button" className="btn" disabled={busy} onClick={() => act(() => api.post(`${V1}/podcasts/${encodeURIComponent(id)}/check`, {}))}>Check now</button>}
+      {detail.can_manage && detail.has_feed && <button type="button" className="btn" disabled={busy} onClick={() => act(() => api.post(`${V1}/podcasts/${encodeURIComponent(id)}/check`, {}))}>Check now</button>}
       {detail.error && <p className="callout danger">{detail.error}</p>}
       {!detail.episodes.length && <p className="muted">Check the feed to find episodes.</p>}
       {detail.episodes.map(ep => <section className="set-section" key={ep.id}><div className="set-section-body row wrap"><div className="grow"><b>{ep.title}</b><p className="small muted">{ep.publishedAt ? new Date(ep.publishedAt).toLocaleDateString() : ''} {ep.status && ep.status !== 'complete' ? ` · ${ep.status}` : ''}</p>{ep.error && <p className="small danger-text">{ep.error}</p>}</div>

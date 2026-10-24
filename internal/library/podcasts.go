@@ -21,10 +21,12 @@ type PodcastOptions struct {
 	URL       string `json:"url"`
 }
 type PodcastSettings struct {
-	Auto     bool `json:"auto_download"`
-	Interval int  `json:"interval_seconds"`
-	Keep     int  `json:"keep_latest"`
-	MaxNew   int  `json:"max_new"`
+	Auto     bool   `json:"auto_download"`
+	Interval int    `json:"interval_seconds"`
+	Keep     int    `json:"keep_latest"`
+	MaxNew   int    `json:"max_new"`
+	Schedule string `json:"schedule"`
+	Timezone string `json:"timezone"`
 }
 
 func (c *Catalog) CanManagePodcast(ctx context.Context, uid int64, item string) error {
@@ -155,8 +157,7 @@ func saveFeed(ctx context.Context, tx *sql.Tx, id string, doc sourceRow, f feed.
 			return err
 		}
 	}
-	_, err = tx.ExecContext(ctx, `UPDATE catalog_podcast_subscriptions SET last_check=?,error='' WHERE item_id=?`, time.Now().UnixMilli(), id)
-	return err
+	return completePodcastCheck(ctx, tx, id, time.Now(), "")
 }
 func (c *Catalog) UpdateFeed(ctx context.Context, uid int64, id string, f feed.Feed) error {
 	if err := c.CanManagePodcast(ctx, uid, id); err != nil {
@@ -201,10 +202,18 @@ func (c *Catalog) SetPodcastSettings(ctx context.Context, uid int64, id string, 
 		return err
 	}
 	url := str(object(objectJSON(string(it.Document))["media"])["feedURL"])
-	if url == "" {
+	if url == "" && in.Auto {
 		return ErrInvalid
 	}
-	_, err = c.DB.ExecContext(ctx, `INSERT INTO catalog_podcast_subscriptions(item_id,feed_url,actor_id,auto_download,interval_seconds,keep_latest,max_new) VALUES(?,?,?,?,?,?,?) ON CONFLICT(item_id) DO UPDATE SET actor_id=excluded.actor_id,auto_download=excluded.auto_download,interval_seconds=excluded.interval_seconds,keep_latest=excluded.keep_latest,max_new=excluded.max_new`, id, url, uid, in.Auto, in.Interval, in.Keep, in.MaxNew)
+	in.Schedule = strings.TrimSpace(in.Schedule)
+	if in.Timezone == "" {
+		in.Timezone = "UTC"
+	}
+	next, err := NextPodcastCheck(in, time.Now())
+	if err != nil {
+		return err
+	}
+	_, err = c.DB.ExecContext(ctx, `INSERT INTO catalog_podcast_subscriptions(item_id,feed_url,actor_id,auto_download,interval_seconds,keep_latest,max_new,schedule,timezone,next_check) VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(item_id) DO UPDATE SET actor_id=excluded.actor_id,auto_download=excluded.auto_download,interval_seconds=excluded.interval_seconds,keep_latest=excluded.keep_latest,max_new=excluded.max_new,schedule=excluded.schedule,timezone=excluded.timezone,next_check=excluded.next_check`, id, url, uid, in.Auto, in.Interval, in.Keep, in.MaxNew, in.Schedule, in.Timezone, next.UnixMilli())
 	return err
 }
 

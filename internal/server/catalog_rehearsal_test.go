@@ -114,6 +114,17 @@ func TestNativeCatalogSnapshotRehearsal(t *testing.T) {
 			t.Fatalf("imported podcast episode list: %v", e)
 		}
 		episodeCount += len(eps)
+		if os.Getenv("POCKET_NATIVE_REHEARSAL_SCHEDULES") == "1" {
+			item, e := s.catalog().Item(ctx, uid, pod.ID)
+			if e != nil {
+				t.Fatal(e)
+			}
+			media := nativeMap(nativeMapJSON(json.RawMessage(item.Document))["media"])
+			sub, e := s.catalog().PodcastSubscription(ctx, uid, pod.ID)
+			if e != nil || sub.Actor == nil || *sub.Actor != uid || sub.Auto != (media["autoDownloadEpisodes"] == true || nativeNumber(media["autoDownloadEpisodes"]) == 1) || sub.Schedule != nativeString(media["autoDownloadSchedule"]) || sub.Keep != int(nativeNumber(media["maxEpisodesToKeep"])) || sub.MaxNew != int(nativeNumber(media["maxNewEpisodesToDownload"])) || sub.LastCheck != nativeMillis(media["lastEpisodeCheck"]) || sub.Timezone != "Europe/Sarajevo" {
+				t.Fatalf("subscription migration mismatch for %s: %+v %v", pod.ID, sub, e)
+			}
+		}
 		if w := get("/api/v1/podcasts/"+pod.ID, ""); w.Code != 200 {
 			t.Fatalf("imported podcast HTTP %d %s", w.Code, w.Body.String())
 		}

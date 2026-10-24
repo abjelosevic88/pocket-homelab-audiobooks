@@ -201,6 +201,13 @@ func (s *Server) nativeItem(ctx context.Context, uid int64, id string) (nativeOb
 		media["duration"] = duration
 		meta["feedUrl"] = m["feedURL"]
 		meta["imageUrl"] = m["imageURL"]
+		subscription, e := s.catalog().PodcastSubscription(ctx, uid, it.ID)
+		if e != nil {
+			return nil, e
+		}
+		media["autoDownloadEpisodes"], media["autoDownloadSchedule"] = subscription.Auto, subscription.Schedule
+		media["lastEpisodeCheck"], media["maxEpisodesToKeep"], media["maxNewEpisodesToDownload"] = subscription.LastCheck, subscription.Keep, subscription.MaxNew
+		media["scheduleTimezone"] = subscription.Timezone
 	}
 	media["numAudioFiles"], media["numTracks"], media["numChapters"] = len(nativeArray(m["audioFiles"])), len(nativeArray(m["audioFiles"])), len(nativeArray(m["chapters"]))
 	return nativeObject{"id": it.ID, "libraryId": it.LibraryID, "mediaType": it.MediaType, "addedAt": it.AddedAt, "updatedAt": it.UpdatedAt, "isMissing": it.Missing, "isInvalid": false, "media": media, "libraryFiles": nativeMap(doc["item"])["libraryFiles"]}, nil

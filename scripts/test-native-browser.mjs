@@ -127,6 +127,15 @@ try {
   await page.getByLabel('RSS or Atom feed URL', { exact: true }).fill('http://podcast.test/feed.xml')
   await page.getByRole('button', { name: 'Subscribe', exact: true }).click()
   await page.getByRole('heading', { name: 'Browser podcast', exact: true }).waitFor()
+  await page.getByText('Subscription settings', {exact:true}).click()
+  await page.getByLabel('Calendar schedule (optional)', {exact:true}).fill('0 9 * * mon')
+  await page.getByLabel('Schedule timezone', {exact:true}).fill('Europe/Sarajevo')
+  await page.getByRole('button', {name:'Save subscription settings',exact:true}).click()
+  await page.waitForFunction(async()=>{
+    const id=location.pathname.split('/').pop()
+    const info=await fetch('/api/v1/podcasts/'+id).then(r=>r.json())
+    return info.settings.schedule==='0 9 * * mon' && info.settings.timezone==='Europe/Sarajevo' && info.settings.auto_download===false && info.next_check>0
+  })
   await page.getByRole('button', { name: 'Download episode', exact: true }).click()
   await page.getByRole('button', { name: 'Play episode', exact: true }).click({ timeout: 25000 })
   await page.waitForFunction(() => {const a=window.__nativeAudio; return a && !a.paused && a.currentTime>0.5})

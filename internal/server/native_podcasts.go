@@ -190,11 +190,12 @@ func (s *Server) nativePodcasts(w http.ResponseWriter, r *http.Request) {
 			s.nativeError(w, err)
 			return
 		}
-		config := library.PodcastSettings{Interval: 3600, MaxNew: 3}
-		var checked int64
-		var lastError string
-		_ = s.store.DB.QueryRowContext(ctx, `SELECT auto_download,interval_seconds,keep_latest,max_new,last_check,error FROM catalog_podcast_subscriptions WHERE item_id=?`, id).Scan(&config.Auto, &config.Interval, &config.Keep, &config.MaxNew, &checked, &lastError)
-		writeJSON(w, 200, nativeObject{"item": it, "episodes": eps, "settings": config, "last_check": checked, "error": lastError, "can_manage": c.CanManagePodcast(ctx, uid, id) == nil, "can_delete": c.CanDelete(ctx, uid, id) == nil})
+		config, err := c.PodcastSubscription(ctx, uid, id)
+		if err != nil {
+			s.nativeError(w, err)
+			return
+		}
+		writeJSON(w, 200, nativeObject{"item": it, "episodes": eps, "settings": config.PodcastSettings, "last_check": config.LastCheck, "next_check": config.NextCheck, "error": config.Error, "has_feed": nativeString(nativeMap(nativeMapJSON(json.RawMessage(it.Document))["media"])["feedURL"]) != "", "can_manage": c.CanManagePodcast(ctx, uid, id) == nil, "can_delete": c.CanDelete(ctx, uid, id) == nil})
 		return
 	}
 	if len(tail) == 2 && tail[1] == "check" && r.Method == "POST" {
@@ -279,38 +280,62 @@ func (s *Server) nativePodcastLoop(ctx context.Context) {
 		if s.runPodcastJob(ctx) {
 			continue
 		}
-		// Check one due subscription per tick so one slow feed cannot monopolize
-		// the download queue. Automatic subscriptions always run as their owner.
-		var id string
-		var uid, last int64
-		var maxNew int
-		err := s.store.DB.QueryRowContext(ctx, `SELECT item_id,actor_id,last_check,max_new FROM catalog_podcast_subscriptions WHERE auto_download=1 AND actor_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM catalog_library_state s JOIN catalog_items i ON i.library_id=s.library_id WHERE i.id=catalog_podcast_subscriptions.item_id AND s.archived=1) AND NOT EXISTS(SELECT 1 FROM catalog_removed_items r WHERE r.item_id=catalog_podcast_subscriptions.item_id) AND last_check+interval_seconds*1000<=? ORDER BY last_check LIMIT 1`, time.Now().UnixMilli()).Scan(&id, &uid, &last, &maxNew)
-		if err != nil {
-			continue
-		}
-		err = s.checkPodcast(ctx, uid, id)
-		if err != nil {
-			_, _ = s.store.DB.ExecContext(ctx, `UPDATE catalog_podcast_subscriptions SET last_check=?,error=? WHERE item_id=?`, time.Now().UnixMilli(), "Feed check failed; try Check now", id)
-			continue
-		}
-		episodes, err := s.catalog().PodcastEpisodes(ctx, uid, id)
-		if err != nil {
-			continue
-		}
-		if e := s.catalog().RetainPodcast(ctx, id); e != nil {
-			s.log.Warn("podcast retention", "error", e)
-		}
-		added := 0
-		for _, ep := range episodes {
-			if ep.Downloaded || ep.InTrash || ep.PublishedAt <= last || added >= maxNew {
-				continue
-			}
-			if _, err = s.catalog().QueueEpisode(ctx, uid, id, ep.ID); err == nil {
-				added++
-			}
-		}
+		s.checkOnePodcast(ctx)
 	}
 }
+
+func (s *Server) checkOnePodcast(ctx context.Context) bool {
+	// Check one due subscription per tick so one slow feed cannot monopolize
+	// the download queue. Automatic subscriptions always run as their owner.
+	var id string
+	var uid, last int64
+	var maxNew int
+	err := s.store.DB.QueryRowContext(ctx, `SELECT item_id,actor_id,download_watermark,max_new FROM catalog_podcast_subscriptions WHERE auto_download=1 AND actor_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM catalog_library_state s JOIN catalog_items i ON i.library_id=s.library_id WHERE i.id=catalog_podcast_subscriptions.item_id AND s.archived=1) AND NOT EXISTS(SELECT 1 FROM catalog_removed_items r WHERE r.item_id=catalog_podcast_subscriptions.item_id) AND next_check<=? ORDER BY next_check LIMIT 1`, time.Now().UnixMilli()).Scan(&id, &uid, &last, &maxNew)
+	if err != nil {
+		return false
+	}
+	err = s.checkPodcast(ctx, uid, id)
+	if err != nil {
+		_ = s.catalog().PodcastCheckFailed(ctx, id)
+		return true
+	}
+	// Settings may have changed while the network request was in flight.
+	current, err := s.catalog().PodcastSubscription(ctx, uid, id)
+	if err != nil || !current.Auto || current.Actor == nil || *current.Actor != uid {
+		return true
+	}
+	maxNew = current.MaxNew
+	episodes, err := s.catalog().PodcastEpisodes(ctx, uid, id)
+	if err != nil {
+		return true
+	}
+	if e := s.catalog().RetainPodcast(ctx, id); e != nil {
+		s.log.Warn("podcast retention", "error", e)
+	}
+	added := 0
+	queuedAll := true
+	for _, ep := range episodes {
+		if ep.Downloaded || ep.InTrash || ep.PublishedAt <= last || added >= maxNew {
+			continue
+		}
+		if ep.Status == "queued" || ep.Status == "running" {
+			added++
+			continue
+		}
+		if _, err = s.catalog().QueueEpisode(ctx, uid, id, ep.ID); err == nil {
+			added++
+		} else {
+			queuedAll = false
+		}
+	}
+	// Advance only after durable queue inserts. A restart or enqueue failure
+	// retries the same window; active-job uniqueness makes retries safe.
+	if queuedAll {
+		_, _ = s.store.DB.ExecContext(ctx, `UPDATE catalog_podcast_subscriptions SET download_watermark=max(download_watermark,?) WHERE item_id=? AND actor_id=? AND auto_download=1`, current.LastCheck, id, uid)
+	}
+	return true
+}
+
 func (s *Server) runPodcastJob(ctx context.Context) bool {
 	var job, item, episode string
 	var uid int64

@@ -115,7 +115,7 @@ as a standalone implementation.
 | Clients | Native Pocket app API, third-party login, refresh, token streams, Socket.IO | Pending |
 | Organisation | Collections, personal playlists, bulk add/remove/reorder | Imported associations, CRUD, ordered batch changes and private ownership verified in API/store tests; create/edit verified in the browser |
 | Ebooks | Serving/reading contract, reading progress, companion books, sending to ereaders | EPUB/PDF web reading, chapter navigation, text size, EPUB CFI/PDF page resume, separate companion positions, optimistic conflict checks, durable browser saves and original-file client downloads implemented. Browser EPUB/PDF save/reload verified. Ereader delivery and remaining formats/tools pending |
-| Podcasts | Feeds/OPML, discovery, episode checks/downloads, scheduling and retention | RSS/Atom subscriptions, OPML import/export, checks, scheduled new-episode downloads, persistent/cancellable jobs, validation, missing-file repair and web/client playback implemented. Browser subscribe/download/play/save/reload verified. Recoverable keep-latest retention, episode/show deletion, Apple Podcasts search and persistent episode metadata/chapter editing implemented. Client feed preview, creation, OPML parsing, checks, search, queue and episode read/edit/delete routes implemented; bulk import/matching and remaining library compatibility routes pending |
+| Podcasts | Feeds/OPML, discovery, episode checks/downloads, scheduling and retention | RSS/Atom subscriptions, OPML import/export, checks, scheduled new-episode downloads, persistent/cancellable jobs, validation, missing-file repair and web/client playback implemented. Browser subscribe/download/play/save/reload verified. Recoverable keep-latest retention, episode/show deletion, Apple Podcasts search and persistent episode metadata/chapter editing implemented. Calendar schedules/timezones, download limits and failure/restart recovery implemented and imported. Client feed preview, creation, OPML parsing, checks, search, queue and episode read/edit/delete routes implemented; bulk import/matching and remaining library compatibility routes pending |
 | Sharing | RSS for books/series/collections, media shares, passwords/expiry/download permissions | Native RSS and share pages for books, series, collections and podcast episodes; password grants, expiry/revocation, current publisher permissions, per-episode media boundaries, original downloads and HLS fallback implemented. Browser create/play/resume/RSS/revoke and protocol isolation tests pass; source snapshot has no published feeds |
 | Accounts | Local/SSO authentication, per-user isolation, permissions, API-key lifecycle | Admin mapping/grants, library/tag/explicit permissions, locking, stale-update rejection and account ownership verified; full migration pending |
 | Tools | Metadata embedding, M4B conversion, jobs, cancellation, status | Pending |
@@ -178,7 +178,13 @@ required before live cutover.
 The importer preserves library/item metadata, files, author/series relationships,
 podcast episodes, collections/playlists, accounts/permissions, progress, bookmarks
 and history. Importing entity data does not implement its management features.
-Devices, shares/feeds, notifications, settings, custom providers and authentication
+Podcast subscription calendars, timezone, retention/download limits and last successful checks
+are imported into native settings. Use `--schedule-timezone` to identify the source
+server timezone and `--podcast-owner` to select a retained mapped account for global
+subscription jobs. Without a selected owner, settings remain preserved and the
+report lists unassigned subscriptions; no automatic worker runs for them.
+
+Devices, shares/feeds, notifications, remaining settings, custom providers and authentication
 material remain in the source snapshot for later migration stages; this command
 does not claim to migrate those into functioning native services.
 
@@ -383,3 +389,30 @@ The user may explicitly replace it with one chapter per included track; a shorte
 timeline that cannot contain current chapters requires this choice. Metadata can
 be exported first. Tests cover disc grouping, embedded track order, exclusion,
 chapter boundaries, stale edits/reports and preserving manual order after rescan.
+
+## Podcast schedules and migration
+
+Subscriptions support fixed intervals or five/six-field calendar schedules with an
+explicit IANA timezone. Calendar day-of-month and weekday constraints both apply,
+preserving the source server's rule. The independent Go adapter uses robfig/cron
+for calendar arithmetic, including daylight-saving transitions. Invalid/impossible
+schedules reject the edit/import instead of silently substituting another schedule.
+
+Feed failures keep the last successful check and back off retrying. A separate
+download watermark advances only after episode jobs are durably queued; a restart
+between feed refresh and queuing cannot skip newly discovered episodes. Retries
+reuse pending jobs, while disabled subscriptions and archived libraries stay idle.
+
+Source schedules require an explicit migration timezone. The household source
+container uses Europe/Sarajevo. All 11 podcast records have automatic downloads off,
+an hourly calendar, keep-all retention and a three-episode limit. Four have feed
+URLs; seven are local podcast records with no feed. Their dormant settings are
+preserved too. The owner-only rehearsal explicitly assigns global subscription
+jobs to the retained root mapping, never to an excluded or arbitrary account.
+No feed requests, downloads or media changes run during import or snapshot tests.
+
+Use `POCKET_NATIVE_REHEARSAL_SCHEDULES=1` with a freshly imported owner-only snapshot
+to compare each native subscription against the source metadata. Calendar tests
+cover weekday/month-day intersections, Sunday aliases, optional seconds and both
+Sarajevo daylight-saving transitions. Worker tests cover outages, retries, disabled
+jobs and a restart after fetching a feed but before queuing its episodes.
