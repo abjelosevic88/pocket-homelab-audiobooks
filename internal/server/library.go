@@ -163,6 +163,14 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 		seen[b.ID] = true
 	}
 	sort.SliceStable(continueL, func(i, j int) bool { return continueL[i].LastPlayed > continueL[j].LastPlayed })
+	if len(recent) == 0 {
+		// Audiobookshelf only shelves recent additions: otherwise the newest books of each library
+		for _, l := range libs {
+			if p, err := ac.c.Items(ctx, l.ID, abs.ItemsQuery{Sort: "addedAt", Desc: true, Limit: 12}); err == nil {
+				recent = append(recent, books(p.Results, prog)...)
+			}
+		}
+	}
 	sort.SliceStable(recent, func(i, j int) bool { return recent[i].AddedAt > recent[j].AddedAt })
 	dedupe := func(bs []Book) []Book {
 		out := bs[:0]
