@@ -125,3 +125,29 @@ and folder access. No complete-file buffering in Pocket memory or its data volum
 Success is Audiobookshelf's `200 OK`; scanning may finish later. Matching destination filenames are overwritten.
 The configured whole-request size limit applies even without Content-Length. Oversized requests return 413;
 accounts without upload permission return 403 before any file bytes are forwarded.
+
+## Native catalog migration preview
+
+These additive endpoints read the independent local SQLite catalog. They are for
+migration verification; they do not switch the existing player's backend or
+provide native playback/progress writes yet. See [standalone migration](standalone-migration.md).
+
+All require normal Pocket authentication (session, API token, or a validated Core
+person/device token) plus an explicitly mapped native account. Core app-link
+scopes do not grant access to these preview routes. Library, tag and explicit
+content restrictions apply to lists, counts, detail, progress and files. An
+unmapped, inactive or locked source account has no access, including Pocket admins.
+
+| Method | Path | Result |
+| --- | --- | --- |
+| GET | `/catalog/libraries` | Accessible libraries with permission-filtered item counts |
+| GET | `/catalog/items?library=&type=&q=&offset=0&limit=50` | Stable title/ID order, literal title/author substring search, maximum 200 items per page |
+| GET | `/catalog/items/{id}` | Imported item metadata and indexed file descriptions |
+| GET | `/catalog/me/progress` | The account's imported progress for currently accessible items |
+| GET, HEAD | `/catalog/items/{id}/files/{file}` | Local file bytes with byte-range support; `?download=1` requires download permission |
+
+Paths are relative to `/api/v1`. Files open within configured media roots using
+Go's `os.Root`; symlink escapes are blocked. Only audio and raster covers render
+inline. Ebooks and supplementary files are attachments and require download
+permission. All responses use private, no-store caching. A missing/restricted
+entry returns 404; absent Pocket authentication returns 401.

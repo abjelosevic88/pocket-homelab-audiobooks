@@ -129,3 +129,11 @@ above are that library; [scripts/screenshots.mjs](scripts/screenshots.mjs) is al
 Go, chi, SQLite (modernc), React 19, Vite, hls.js. Works with Audiobookshelf 2.26+ (API keys; earlier versions with a
 password); works alone, and with [Pocket Core](https://github.com/abjelosevic88/pocket-homelab-core) for single
 sign-on, paired phones and the links between apps. MIT licensed.
+
+## Standalone server development
+
+An independent Go backend is being built in stages using the existing Go,
+SQLite, React/TypeScript and Pocket Core stack. The first stage adds a local
+catalog, a transactional snapshot importer and authenticated local file serving.
+The current player still uses Audiobookshelf; full feature parity and migration
+are not complete. See [migration stages and verification](docs/standalone-migration.md).

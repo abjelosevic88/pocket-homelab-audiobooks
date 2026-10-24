@@ -35,6 +35,9 @@ func main() {
 		case "version", "--version", "-v":
 			fmt.Println("pocket-audiobooks", version)
 			return
+		case "import-audiobookshelf":
+			runCatalogImport(os.Args[2:])
+			return
 		case "backup":
 			runBackup(os.Args[2:])
 			return
@@ -49,6 +52,8 @@ Usage:
   pocket-audiobooks backup [-o FILE]    write a consistent SQLite backup
   pocket-audiobooks reset-password [-email USER] [-password NEW]
                                    set a user's password (default: first user, random password printed)
+  pocket-audiobooks import-audiobookshelf --source SNAPSHOT --mounts MAP --users MAP [--apply]
+                                   validate/import into an empty native catalog
   pocket-audiobooks version             print version
 
 Configuration is read from environment variables, see docs/configuration.md.`)

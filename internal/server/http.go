@@ -39,6 +39,8 @@ func (s *Server) Router() http.Handler {
 		// Long transfers: uploads, audio, playlists and covers bypass timeout/compression.
 		r.Group(func(r chi.Router) {
 			r.Use(s.requireAuth)
+			r.Get("/catalog/items/{id}/files/{file}", s.handleCatalogFile)
+			r.Head("/catalog/items/{id}/files/{file}", s.handleCatalogFile)
 			r.Post("/upload", s.handleUpload)
 			r.Get("/media/*", s.handleMedia)
 			r.Head("/media/*", s.handleMedia)
@@ -71,6 +73,10 @@ func (s *Server) Router() http.Handler {
 				r.Get("/dashboard", s.handleDashboard)
 				r.Get("/day/{date}", s.handleDay)
 
+				r.Get("/catalog/libraries", s.handleCatalogLibraries)
+				r.Get("/catalog/items", s.handleCatalogItems)
+				r.Get("/catalog/items/{id}", s.handleCatalogItem)
+				r.Get("/catalog/me/progress", s.handleCatalogProgress)
 				r.Get("/libraries", s.handleLibraries)
 				r.Get("/upload", s.handleUploadOptions)
 				r.Get("/books", s.handleBooks)
