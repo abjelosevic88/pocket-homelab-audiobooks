@@ -69,3 +69,20 @@ with a note.
 from `MAX_UPLOAD_BYTES`, the smaller limit used for data imports. Uploads stream to Audiobookshelf using the
 signed-in person's upload permission. Allow an equivalent request size and sufficiently long upload timeouts
 in any reverse proxy. Audiobookshelf requires free space in its metadata temporary directory and library folder.
+
+### Native metadata providers
+
+In native mode, Libraries → Metadata providers configures Open Library, Google
+Books (requires your API key), and custom providers using the
+`GET /search?query=…&author=…&isbn=…&mediaType=book` / `{ "matches": […] }` contract.
+Provider credentials are sealed with the app's `secret.key`; include it in backups.
+Metadata is previewed in the editor before saving. Cover URLs save only when
+explicitly selected, with the same image validation as uploaded covers.
+
+Outbound metadata/artwork requests permit public HTTP/HTTPS destinations by
+default. For a self-hosted provider, set `NATIVE_FETCH_PRIVATE_HOSTS` to its exact
+hostname (comma-separated for multiple hosts). DNS and each redirect are checked
+at connection time; provider credentials are not forwarded to a different host.
+
+Provider contracts: [Open Library search](https://openlibrary.org/dev/docs/api/search)
+and [Google Books API](https://developers.google.com/books/docs/v1/using).

@@ -59,6 +59,20 @@ func (s *Server) nativeAPI(w http.ResponseWriter, r *http.Request, uid int64) {
 		s.nativeHLS(w, r, uid, parts[1], parts[2])
 		return
 	}
+	if read && (path == "/api/search/providers" || path == "/api/search/books" || path == "/api/search/covers") {
+		u, err := s.store.GetUser(ctx, uid)
+		if err != nil {
+			s.nativeError(w, err)
+			return
+		}
+		r = r.WithContext(context.WithValue(ctx, userKey, u))
+		if path == "/api/search/providers" {
+			s.nativeProviders(w, r)
+		} else {
+			s.nativeMetadataSearch(w, r)
+		}
+		return
+	}
 	if path == "/api/upload" && method == "POST" {
 		s.nativeUpload(w, r, uid)
 		return

@@ -247,6 +247,16 @@ func TestNativeBrowserAcceptance(t *testing.T) {
 	if _, err = s.store.DB.Exec(`INSERT INTO catalog_entities VALUES('libraryFolders','folder','lib','{"id":"folder","path":"/media"}')`); err != nil {
 		t.Fatal(err)
 	}
+	s.nativeFetchHTTP = &http.Client{Transport: gatewayTransport(func(r *http.Request) (*http.Response, error) {
+		if r.URL.Host != "openlibrary.org" {
+			return nil, fmt.Errorf("unexpected metadata host")
+		}
+		body := `{"docs":[{"key":"/works/OL1W","title":"Matched in browser","author_name":["Test Writer"]}]}`
+		if strings.HasPrefix(r.URL.Path, "/works/") {
+			body = `{"description":"Description from metadata"}`
+		}
+		return &http.Response{StatusCode: 200, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(body))}, nil
+	})}
 	s.webFS, err = fs.Sub(web.Dist, "dist")
 	if err != nil {
 		t.Fatal(err)

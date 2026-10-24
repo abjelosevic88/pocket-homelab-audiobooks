@@ -22,6 +22,10 @@ try {
   })
   await page.getByRole('button', { name: 'More', exact: true }).click()
   await page.getByText('Edit book', { exact: true }).click()
+  await page.getByText('Find metadata', { exact: true }).click()
+  await page.getByRole('button', { name: 'Search metadata', exact: true }).click()
+  await page.getByRole('button', { name: 'Use this metadata', exact: true }).click()
+  await page.waitForFunction(() => [...document.querySelectorAll('input')].some(i => i.value === 'Matched in browser'))
   await page.getByLabel('Cover image', { exact: false }).setInputFiles({ name: 'cover.png', mimeType: 'image/png', buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2ZAAAAABJRU5ErkJggg==', 'base64') })
   await page.getByText('Cover saved', { exact: true }).waitFor()
   await page.getByLabel('Title', { exact: true }).fill('Edited in browser')
@@ -56,5 +60,5 @@ try {
   await page.getByRole('button', { name: 'Save list', exact: true }).click()
   await page.getByRole('heading', { name: 'Renamed collection', exact: true }).waitFor()
   assert.deepEqual(errors, [])
-  console.log('Native browser acceptance passed: play, pause/save, metadata edit, scan, upload, browse, account access and collection editing.')
+  console.log('Native browser acceptance passed: play, pause/save, metadata search/edit, scan, upload, browse, account access and collection editing.')
 } finally { await context.close(); await browser.close() }

@@ -78,6 +78,10 @@ func (s *Server) Router() http.Handler {
 
 				r.HandleFunc("/organize/*", s.nativeOrganize)
 				r.Get("/catalog/manage", s.nativeManage)
+				r.Get("/catalog/metadata/providers", s.nativeProviders)
+				r.Put("/catalog/metadata/providers", s.nativeProviders)
+				r.Get("/catalog/metadata/search", s.nativeMetadataSearch)
+				r.Post("/catalog/items/{id}/cover-url", s.nativeCoverURL)
 				r.Get("/catalog/accounts", s.nativeAccounts)
 				r.Put("/catalog/accounts", s.nativeAccounts)
 				r.Post("/catalog/libraries", s.nativeLibraryCreate)

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { MetadataSearch } from './MetadataSearch'
 import { api, V1, upload } from '../lib/api'
 import type { Chapter } from '../lib/types'
 import { Field, Loading, Modal, errMsg, useToast } from './ui'
@@ -7,6 +8,7 @@ type Named = { id?: string; name: string; sequence?: string }
 type Form = { expected_updated_at: number; metadata: Record<string, unknown> & { title: string; authors: Named[]; series: Named[] }; chapters: Chapter[] }
 export function BookEditor({ id, onClose, onSaved }: { id: string; onClose: () => void; onSaved: () => void }) {
   const [form, setForm] = useState<Form | null>(null)
+  const [coverURL, setCoverURL] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const { toast } = useToast()
@@ -30,6 +32,9 @@ export function BookEditor({ id, onClose, onSaved }: { id: string; onClose: () =
   return <Modal title="Edit book" size="lg" onClose={onClose}>
     {error && <p role="alert" className="callout danger">{error}</p>}
     {!form ? <Loading /> : <form className="stack" onSubmit={save}>
+      <MetadataSearch title={form.metadata.title} author={form.metadata.authors.map(a => a.name).join(', ')} onSelect={(metadata, cover) => { setForm(f => f && ({ ...f, metadata: { ...f.metadata, ...metadata } })); setCoverURL(cover) }} />
+      <Field label="Cover URL" help="A cover is saved when you press Use cover."><input type="url" value={coverURL} onChange={e => setCoverURL(e.target.value)} /></Field>
+      {coverURL && <button type="button" className="btn" disabled={busy} onClick={async () => {setBusy(true);setError('');try {const result=await api.post<{updated_at:number}>(`${V1}/catalog/items/${encodeURIComponent(id)}/cover-url`,{url:coverURL});setForm(f=>f && ({...f,expected_updated_at:result.updated_at}));onSaved();toast('Cover saved')}catch(e){setError(errMsg(e))}finally{setBusy(false)}}}>Use cover</button>}
       <Field label="Cover image" help="JPEG or PNG. The image is saved when selected."><input type="file" accept="image/jpeg,image/png" disabled={busy} onChange={e => { void cover(e.target.files?.[0]) }} /></Field>
       <Field label="Title"><input required value={form.metadata.title} onChange={e => set('title', e.target.value)} /></Field>
       <Field label="Authors" help="Separate names with a semicolon."><input value={form.metadata.authors.map(a => a.name).join('; ')} onChange={e => set('authors', e.target.value.split(';').map(name => ({ name: name.trim() })).filter(a => a.name))} /></Field>

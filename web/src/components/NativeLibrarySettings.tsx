@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { MetadataSettings } from './MetadataSettings'
 import { NativeAccounts } from './NativeAccounts'
 import { useApp } from '../lib/app-context'
 import { api, V1 } from '../lib/api'
@@ -65,7 +66,7 @@ export function NativeLibrarySettings() {
         </div>}
       </section>
     })}
-    {user?.role === 'admin' && <NativeAccounts />}
+    {user?.role === 'admin' && <><NativeAccounts /><MetadataSettings /></>}
     {user?.role === 'admin' && <section className="set-section"><div className="set-section-head"><h3>Add a library</h3></div><form className="set-section-body stack" onSubmit={create}>
       <label>Name<input required value={newLibrary.name} onChange={e => setNewLibrary({ ...newLibrary, name: e.target.value })} /></label>
       <label>Folder on the server<input required placeholder="/media/audiobooks" value={newLibrary.path} onChange={e => setNewLibrary({ ...newLibrary, path: e.target.value })} /></label>

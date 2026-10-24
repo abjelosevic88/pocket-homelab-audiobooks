@@ -98,7 +98,7 @@ as a standalone implementation.
 | Scanning | Incremental scan, watcher, manual/rescan, missing files, regrouping, file moves | Incremental/manual scans, polling, missing records and same-root moves verified; regrouping/cross-root moves pending |
 | Book ingestion | Single/multiple audio files, ebooks, tags, sidecars, chapters, covers, track order | Audio tags, natural ordering, embedded chapters, covers and JSON/text sidecars verified; legacy metadata.abs and multi-disc grouping pending |
 | Library management | Uploads, metadata/chapter editing, bulk operations, download, safe deletion | Validated uploads, metadata/chapters/covers and single-file and streamed book ZIP downloads implemented; bulk tools/deletion pending |
-| Metadata | Built-in/custom providers, matching, covers, authors, series, genres, tags, narrators | Pending |
+| Metadata | Built-in/custom providers, matching, covers, authors, series, genres, tags, narrators | Open Library, Google Books and custom provider search/preview, detail lookup and cover fetching implemented; Open Library live contract and browser selection verified. Other built-in providers and automated matching pending |
 | Browse | Search, filters, sorts, pagination, shelves, series and authors | Pending |
 | Playback | Direct/range streaming, multi-file timeline, transcoding/HLS, seeking | Direct/multi-file playback and local seekable FFmpeg/HLS verified |
 | Personal state | Progress, bookmarks, completion, hidden items, history, statistics | Native writes, retries, resume/finish and isolation verified |

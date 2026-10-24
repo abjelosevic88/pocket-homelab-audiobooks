@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/abjelosevic88/pocket-homelab-audiobooks/internal/fetch"
 	"io/fs"
 	"log/slog"
 	"net/http"
@@ -55,6 +56,7 @@ type Server struct {
 
 	nativeScanMu     sync.Mutex
 	nativeScanCancel map[string]context.CancelFunc
+	nativeFetchHTTP  *http.Client
 	nativeSockets    *nativeSocketHub
 	playMu           sync.Mutex
 	plays            map[string]*playState // playback session → what is playing
@@ -64,7 +66,7 @@ type Server struct {
 
 // New creates a server.
 func New(cfg *config.Config, st *store.Store, log *slog.Logger, webFS fs.FS) *Server {
-	return &Server{nativeScanCancel: map[string]context.CancelFunc{}, nativeSockets: &nativeSocketHub{}, cfg: cfg, store: st, log: log, webFS: webFS, started: time.Now(), oidc: &oidcProvider{},
+	return &Server{nativeFetchHTTP: fetch.Client(30*time.Second, cfg.NativeFetchPrivateHosts), nativeScanCancel: map[string]context.CancelFunc{}, nativeSockets: &nativeSocketHub{}, cfg: cfg, store: st, log: log, webFS: webFS, started: time.Now(), oidc: &oidcProvider{},
 		absHTTP:    &http.Client{Timeout: 30 * time.Second},
 		streamHTTP: &http.Client{Transport: &http.Transport{Proxy: http.ProxyFromEnvironment, ResponseHeaderTimeout: 60 * time.Second, IdleConnTimeout: 90 * time.Second, MaxIdleConnsPerHost: 16}},
 		core:       core.New(cfg.CoreURL, core.Options{DB: st.DB, TokenFile: cfg.DataDir + "/core.token", UserAgent: cfg.UserAgent}),
