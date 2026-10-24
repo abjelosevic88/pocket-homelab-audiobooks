@@ -89,3 +89,21 @@ Audiobookshelf app).
 
 Sign-in (`/auth/*`), people (`/users`), personal tokens (`/tokens`), settings (`/settings`), `GET /backup` (admins),
 `GET /export.json` and `POST /import` (your own history, finished books and Up next), `/healthz`, `/readyz`, `/metrics`.
+
+## Pocket Homelab / Audiobookshelf gateway
+
+The native player connects to the app's base URL (no `/api/v1` suffix), with a Pocket Audiobooks `pab_` personal
+token or a Pocket Core device token. HTTP Bearer and `X-API-Key` authentication work; GET/HEAD media requests
+also accept `?token=`. Cookie, anonymous, proxy-header and app-link authentication do not grant gateway access.
+
+The gateway preserves Audiobookshelf's JSON shapes and paths: `/status`, `/ping`, library browsing/search,
+items, covers, authors, series, `/api/me` and listening stats, play/sync/close sessions, progress, bookmarks,
+byte-range files, downloads, HLS playlists/segments, local session sync, and the upload/delete operations used
+by Pocket Homelab (subject to the person's Audiobookshelf permissions). `/api/v1` remains Pocket Audiobooks' web API.
+
+Each request uses the person's configured Audiobookshelf connection. Backend access/legacy tokens are replaced
+in responses and refresh tokens are removed. HLS and playback sessions are checked against the person's ABS user,
+even for an ABS administrator. Unknown operations, user administration and key management are rejected.
+
+This is the API used by Pocket Homelab's existing token-based player. It does not implement Audiobookshelf's
+password/OIDC sign-in or Socket.IO; clients requiring those flows still use Audiobookshelf directly.

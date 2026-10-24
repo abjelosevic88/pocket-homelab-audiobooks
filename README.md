@@ -44,6 +44,17 @@
   <img src="docs/screenshots/desktop-book-dark.png" width="420" alt="A book in dark mode">
 </p>
 
+## Connect Pocket Homelab
+
+Use this app's base URL in Pocket Homelab's **Audiobookshelf** settings and a personal token from
+**Settings → API & shortcuts**. The existing native player can browse, play, download, bookmark and save progress
+through Pocket Audiobooks. Audiobookshelf continues to store the library and listening position underneath.
+
+With Pocket Core, select **Pocket Audiobooks** under **Devices → Apps on your devices → Audiobooks** and refresh
+the app's Core configuration. Core supplies the gateway URL and the device's own token using the settings the
+existing app already understands; no phone app rebuild is required.
+
+
 ## Why on top of Audiobookshelf
 
 Audiobookshelf already does the server part very well — scanning folders into books, chapters, Audible and Google

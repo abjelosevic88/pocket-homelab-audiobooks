@@ -20,7 +20,7 @@ const TABS: { id: TabId; label: string; icon: string; sub: string; admin?: boole
   { id: 'notifications', label: 'Notifications', icon: 'bell', sub: 'A push when you finish a book, and a weekly recap.' },
   { id: 'profile', label: 'Profile', icon: 'user', sub: 'Your name, email and password.' },
   { id: 'people', label: 'People', icon: 'users', sub: 'Everyone who has an account on this box.' },
-  { id: 'tokens', label: 'API & shortcuts', icon: 'key', sub: 'Personal tokens for Homepage widgets, Siri Shortcuts and Raycast.' },
+  { id: 'tokens', label: 'API & shortcuts', icon: 'key', sub: 'Connect Pocket Homelab, Homepage widgets and shortcuts.' },
   { id: 'data', label: 'Backup & data', icon: 'database', sub: 'Download the database, export your history or import it.' },
   { id: 'about', label: 'About', icon: 'info', sub: 'Version, numbers and the server.' },
 ]
@@ -356,6 +356,10 @@ function Tokens() {
   const base = settings?.base_url || window.location.origin
   return (
     <div className="stack loose">
+      <Section title="Connect Pocket Homelab" icon="smartphone" sub="Listen in the app with the same library and saved progress.">
+        <p>In the app’s Audiobookshelf settings, set the server to <code>{base}</code> and paste a personal token created below.</p>
+        <p className="muted">If you paired through Pocket Core, choose Pocket Audiobooks under Devices → Apps on your devices, then refresh the app’s Core configuration. Core supplies the address and your device token.</p>
+      </Section>
       <Section title="Personal tokens" icon="key" sub={<>Use as <code>Authorization: Bearer &lt;token&gt;</code>. A token acts as you. See <code>docs/api.md</code>.</>}>
         <form onSubmit={create} className="row mb"><input value={name} onChange={e => setName(e.target.value)} placeholder="Token name (e.g. Homepage widget)" /><button className="btn primary"><Icon name="plus" size={15} />Create</button></form>
         {fresh && <div className="set-fresh mb"><div className="row"><Icon name="check-circle" size={16} /><b>Copy it now — it is shown once.</b></div><pre className="mono">{fresh}</pre></div>}

@@ -120,6 +120,14 @@ func (s *Server) Router() http.Handler {
 		})
 	})
 
+	// Native Audiobookshelf routes coexist with the web app's /api/v1 API.
+	r.Get("/status", s.handleGatewayStatus)
+	r.Get("/ping", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]bool{"success": true})
+	})
+	r.HandleFunc("/api/*", s.handleGateway)
+	r.HandleFunc("/hls/*", s.handleGateway)
+
 	r.NotFound(s.handleSPA)
 	return r
 }

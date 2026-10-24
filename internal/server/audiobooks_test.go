@@ -83,6 +83,10 @@ func newFakeABS(t *testing.T) (*httptest.Server, *fakeABS) {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
+		if r.Method == http.MethodGet {
+			writeJSON(w, http.StatusOK, map[string]string{"id": parts[0], "userId": "u-" + f.key(r)})
+			return
+		}
 		var d map[string]any
 		_ = json.NewDecoder(r.Body).Decode(&d)
 		f.mu.Lock()
