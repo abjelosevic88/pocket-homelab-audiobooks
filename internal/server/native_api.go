@@ -59,6 +59,10 @@ func (s *Server) nativeAPI(w http.ResponseWriter, r *http.Request, uid int64) {
 		s.nativeHLS(w, r, uid, parts[1], parts[2])
 		return
 	}
+	if path == "/api/upload" && method == "POST" {
+		s.nativeUpload(w, r, uid)
+		return
+	}
 	if path == "/status" && read {
 		respond(nativeObject{"app": "audiobookshelf", "serverVersion": "2.37.2", "backend": "Pocket Audiobooks native", "isInit": true, "authMethods": []string{"local"}})
 		return
@@ -186,6 +190,14 @@ func (s *Server) nativeAPI(w http.ResponseWriter, r *http.Request, uid int64) {
 					return
 				}
 				want := parts[3]
+				if want == "cover" {
+					for _, f := range files {
+						if f.ID == "native-cover" {
+							s.nativeFile(w, r, uid, id, f.ID, false)
+							return
+						}
+					}
+				}
 				for _, f := range files {
 					if f.Role == want && (len(parts) < 5 || parts[4] == f.ID) {
 						s.nativeFile(w, r, uid, id, f.ID, want == "ebook")
@@ -237,6 +249,9 @@ func (s *Server) nativeAPI(w http.ResponseWriter, r *http.Request, uid int64) {
 			if out.ProgressApplied {
 				s.nativeSocketProgress(ctx, uid, sid)
 			}
+			if out.FinishedNow {
+				s.nativeNotifyFinished(ctx, uid, sess.ItemID)
+			}
 			respond(out)
 			return
 		}
@@ -279,9 +294,13 @@ func (s *Server) nativeAPI(w http.ResponseWriter, r *http.Request, uid int64) {
 			if len(parts) == 5 {
 				episode = parts[4]
 			}
-			if err = c.SetProgress(ctx, uid, id, episode, in); err != nil {
+			finished, err := c.EditProgress(ctx, uid, id, episode, in)
+			if err != nil {
 				s.nativeError(w, err)
 				return
+			}
+			if finished {
+				s.nativeNotifyFinished(ctx, uid, id)
 			}
 			respond(nativeObject{"success": true})
 			return
@@ -347,7 +366,7 @@ func (s *Server) nativeAPI(w http.ResponseWriter, r *http.Request, uid int64) {
 			s.nativeError(w, err)
 			return
 		}
-		for _, g := range nativeGroups(items, parts[1]) {
+		for _, g := range s.nativeGroups(ctx, items, parts[1]) {
 			if nativeString(g["id"]) == parts[2] {
 				if len(parts) == 4 && parts[3] == "image" {
 					s.nativeImage(w, r, nativeString(g["imagePath"]))
@@ -641,7 +660,7 @@ func (s *Server) nativeLibraryAPI(w http.ResponseWriter, r *http.Request, uid in
 		end := min(start+limit, len(items))
 		respond(nativeObject{"results": items[start:end], "total": len(items), "limit": limit, "page": page})
 	case "series", "authors":
-		groups := nativeGroups(items, tail[0])
+		groups := s.nativeGroups(ctx, items, tail[0])
 		if len(tail) > 1 {
 			for _, g := range groups {
 				if nativeString(g["id"]) == tail[1] {
@@ -669,12 +688,12 @@ func (s *Server) nativeLibraryAPI(w http.ResponseWriter, r *http.Request, uid in
 			}
 		}
 		authors, series := []any{}, []any{}
-		for _, g := range nativeGroups(items, "authors") {
+		for _, g := range s.nativeGroups(ctx, items, "authors") {
 			if strings.Contains(strings.ToLower(nativeString(g["name"])), text) {
 				authors = append(authors, g)
 			}
 		}
-		for _, g := range nativeGroups(items, "series") {
+		for _, g := range s.nativeGroups(ctx, items, "series") {
 			if strings.Contains(strings.ToLower(nativeString(g["name"])), text) {
 				series = append(series, nativeObject{"series": g, "books": g["books"]})
 			}
@@ -700,7 +719,7 @@ func (s *Server) nativeLibraryAPI(w http.ResponseWriter, r *http.Request, uid in
 		for _, it := range items {
 			duration += nativeNumber(nativeMap(it["media"])["duration"])
 		}
-		respond(nativeObject{"totalItems": len(items), "totalDuration": duration, "numAuthors": len(nativeGroups(items, "authors")), "numSeries": len(nativeGroups(items, "series"))})
+		respond(nativeObject{"totalItems": len(items), "totalDuration": duration, "numAuthors": len(s.nativeGroups(ctx, items, "authors")), "numSeries": len(s.nativeGroups(ctx, items, "series"))})
 	case "filterdata":
 		genres, tags, narrators := map[string]bool{}, map[string]bool{}, map[string]bool{}
 		for _, it := range items {
@@ -722,7 +741,7 @@ func (s *Server) nativeLibraryAPI(w http.ResponseWriter, r *http.Request, uid in
 			sort.Strings(v)
 			return v
 		}
-		respond(nativeObject{"genres": keys(genres), "tags": keys(tags), "narrators": keys(narrators), "authors": nativeGroups(items, "authors"), "series": nativeGroups(items, "series")})
+		respond(nativeObject{"genres": keys(genres), "tags": keys(tags), "narrators": keys(narrators), "authors": s.nativeGroups(ctx, items, "authors"), "series": s.nativeGroups(ctx, items, "series")})
 	default:
 		writeErr(w, 501, "native library operation not implemented yet")
 	}
@@ -758,17 +777,11 @@ func (s *Server) nativeWebSync(w http.ResponseWriter, r *http.Request) {
 		s.nativeSocketProgress(r.Context(), uid, id)
 	}
 	if out.FinishedNow {
-		session, err := s.catalog().Session(r.Context(), uid, id)
-		if err == nil {
-			it, err := s.nativeItem(r.Context(), uid, session.ItemID)
-			if err == nil {
-				b, err := nativeDecodeItem(it)
-				if err == nil {
-					s.finished(r.Context(), userFrom(r.Context()), &store.Finish{ItemID: b.ID, Title: b.Media.Metadata.Title, Author: b.Media.Metadata.AuthorName, Duration: int(b.Media.Duration), FinishedAt: store.MillisUTC(in.ObservedAt)})
-				}
-			}
+		if session, err := s.catalog().Session(r.Context(), uid, id); err == nil {
+			s.nativeNotifyFinished(r.Context(), uid, session.ItemID)
 		}
 	}
+
 	writeJSON(w, 200, nativeObject{"ok": true, "duplicate": out.Duplicate, "progress_applied": out.ProgressApplied})
 }
 
@@ -793,4 +806,16 @@ func (s *Server) nativeNowPlaying(w http.ResponseWriter, r *http.Request) {
 		break
 	}
 	writeJSON(w, 200, out)
+}
+
+func (s *Server) nativeNotifyFinished(ctx context.Context, uid int64, item string) {
+	var finish store.Finish
+	err := s.store.DB.QueryRowContext(ctx, `SELECT item_id,title,author,duration,finished_at FROM finishes WHERE user_id=? AND item_id=? ORDER BY finished_at DESC LIMIT 1`, uid, item).Scan(&finish.ItemID, &finish.Title, &finish.Author, &finish.Duration, &finish.FinishedAt)
+	if err != nil {
+		return
+	}
+	u, err := s.store.GetUser(ctx, uid)
+	if err == nil {
+		s.finished(ctx, u, &finish)
+	}
 }

@@ -133,7 +133,7 @@ sign-on, paired phones and the links between apps. MIT licensed.
 ## Standalone server development
 
 An independent Go backend is being built in stages using the existing Go,
-SQLite, React/TypeScript and Pocket Core stack. The first stage adds a local
-catalog, a transactional snapshot importer and authenticated local file serving.
-The current player still uses Audiobookshelf; full feature parity and migration
-are not complete. See [migration stages and verification](docs/standalone-migration.md).
+SQLite, React/TypeScript and Pocket Core stack. Native catalog import, playback,
+progress, local FFmpeg conversion, live client updates, scanning, uploads and
+metadata/chapter editing are implemented behind a backend switch. The deployed
+service still uses Audiobookshelf; full feature parity and migration are not complete. See [migration stages and verification](docs/standalone-migration.md).

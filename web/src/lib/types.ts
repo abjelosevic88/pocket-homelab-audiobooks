@@ -14,6 +14,7 @@ export interface Book {
 }
 export interface Bookmark { libraryItemId: string; title: string; time: number; createdAt: number }
 export interface BookPage {
+ can_edit?: boolean; backend?: string
   book: Book; bookmarks: Bookmark[]; series: { id: string; name: string; sequence: string; books: Book[] }[]; up_next: boolean; progress_id?: string; started_at?: number
   listened: { seconds: number; sessions: number; first: string }; open_url: string
 }
@@ -44,13 +45,14 @@ export interface DayBook { item_id: string; title: string; author: string; cover
 export interface Day { date: string; seconds: number; books: DayBook[]; finished: { item_id: string; title: string; author: string; cover: string; finished_at: string }[]; sessions: number; summary: string }
 
 export interface PlayTrack { url: string; start: number; duration: number; mime: string }
-export interface PlayInfo { backend?: 'native' | 'audiobookshelf'; session_id: string; method: 'direct' | 'hls'; tracks: PlayTrack[]; current_time: number; duration: number; chapters: Chapter[]; book: Book; speed: number }
+export interface PlayInfo { server_time?: number; backend?: 'native' | 'audiobookshelf'; session_id: string; method: 'direct' | 'hls'; tracks: PlayTrack[]; current_time: number; duration: number; chapters: Chapter[]; book: Book; speed: number }
 export interface NowPlaying {
   active: boolean; playing?: boolean; item_id?: string; title?: string; author?: string; cover?: string; position?: number; duration?: number
   device?: string; app?: string; updated_at?: number; server_time: number
 }
 
 export interface Connection {
+ backend?: string
   mode: 'core' | 'key' | 'direct' | 'off'; connected: boolean; message?: string; via?: 'key' | 'direct' | 'core'; account?: string; admin?: boolean
   server_version?: string; public_url?: string; username?: string; custom_url?: string; server_url: boolean; password_login?: boolean
   core: boolean; core_configured: boolean; libraries?: Library[]; in_progress?: number; sync: SyncState; syncing: boolean

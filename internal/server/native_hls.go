@@ -96,7 +96,7 @@ func (s *Server) nativeHLS(w http.ResponseWriter, r *http.Request, uid int64, se
 	}
 	at := float64(n) * nativeSegmentSeconds
 	duration := math.Min(nativeSegmentSeconds, tr.Duration-at)
-	cmd := exec.CommandContext(ctx, s.cfg.FFmpeg, "-hide_banner", "-nostdin", "-loglevel", "error", "-threads", "1", "-filter_threads", "1", "-protocol_whitelist", "file,pipe", "-format_whitelist", "mp3,mov,flac,ogg,wav,matroska,webm,aac,asf,aiff", "-ss", fmt.Sprintf("%.6f", at), "-i", "/proc/self/fd/3", "-t", fmt.Sprintf("%.6f", duration), "-map", "0:a:0", "-vn", "-sn", "-dn", "-c:a", "aac", "-b:a", "96k", "-ac", "2", "-ar", "48000", "-output_ts_offset", fmt.Sprintf("%.6f", at), "-mpegts_copyts", "1", "-f", "mpegts", "pipe:1")
+	cmd := exec.CommandContext(ctx, s.cfg.FFmpeg, "-hide_banner", "-nostdin", "-loglevel", "error", "-threads", "1", "-filter_threads", "1", "-protocol_whitelist", "file,pipe", "-format_whitelist", "mp3,mov,flac,ogg,wav,matroska,webm,aac,asf,aiff,mpeg,mpegts", "-ss", fmt.Sprintf("%.6f", at), "-i", "/proc/self/fd/3", "-t", fmt.Sprintf("%.6f", duration), "-map", "0:a:0", "-vn", "-sn", "-dn", "-c:a", "aac", "-b:a", "96k", "-ac", "2", "-ar", "48000", "-output_ts_offset", fmt.Sprintf("%.6f", at), "-mpegts_copyts", "1", "-f", "mpegts", "pipe:1")
 	cmd.ExtraFiles = []*os.File{file}
 	var out bytes.Buffer
 	cmd.Stdout = &out

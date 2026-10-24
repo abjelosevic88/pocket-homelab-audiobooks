@@ -433,35 +433,40 @@ func (c *Catalog) RecentSessions(ctx context.Context, uid int64, limit int) ([]S
 
 // SetProgress handles explicit edits independently of listening reports.
 func (c *Catalog) SetProgress(ctx context.Context, uid int64, item, episode string, changes map[string]any) error {
+	_, err := c.EditProgress(ctx, uid, item, episode, changes)
+	return err
+}
+func (c *Catalog) EditProgress(ctx context.Context, uid int64, item, episode string, changes map[string]any) (bool, error) {
+	finished := false
 	a, err := c.Account(ctx, uid)
 	if err != nil {
-		return err
+		return false, err
 	}
 	it, err := c.Item(ctx, uid, item)
 	if err != nil {
-		return err
+		return false, err
 	}
 	duration := it.Duration
 	if episode != "" {
 		_, _, duration, err = c.Timeline(ctx, uid, item, episode)
 		if err != nil {
-			return err
+			return false, err
 		}
 	}
 	tx, err := c.DB.BeginTx(ctx, nil)
 	if err != nil {
-		return err
+		return false, err
 	}
 	defer tx.Rollback()
 	doc := sourceRow{}
 	var prev string
 	err = tx.QueryRowContext(ctx, `SELECT document FROM catalog_progress WHERE account_id=? AND item_id=? AND episode_id=?`, a.ID, item, episode).Scan(&prev)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return err
+		return false, err
 	}
 	if prev != "" {
 		if err = json.Unmarshal([]byte(prev), &doc); err != nil {
-			return err
+			return false, err
 		}
 	}
 	for key, v := range changes {
@@ -469,23 +474,23 @@ func (c *Catalog) SetProgress(ctx context.Context, uid int64, item, episode stri
 		case "currentTime", "ebookProgress":
 			n := number(v)
 			if !validSeconds(n) || (key == "currentTime" && duration > 0 && n > duration+1) || (key == "ebookProgress" && n > 1) {
-				return ErrInvalid
+				return false, ErrInvalid
 			}
 			doc[key] = n
 		case "isFinished", "hideFromContinueListening":
 			b, ok := v.(bool)
 			if !ok {
-				return ErrInvalid
+				return false, ErrInvalid
 			}
 			doc[key] = b
 		case "ebookLocation":
 			s, ok := v.(string)
 			if !ok || len(s) > 8192 {
-				return ErrInvalid
+				return false, ErrInvalid
 			}
 			doc[key] = s
 		default:
-			return fmt.Errorf("%w: unsupported progress field %s", ErrInvalid, key)
+			return false, fmt.Errorf("%w: unsupported progress field %s", ErrInvalid, key)
 		}
 	}
 	now := time.Now().UnixMilli()
@@ -499,8 +504,8 @@ func (c *Catalog) SetProgress(ctx context.Context, uid int64, item, episode stri
 		if truth(v) {
 			doc["finishedAt"] = now
 			if episode == "" && it.MediaType == "book" {
-				if _, err = recordNativeFinish(ctx, tx, uid, it, now); err != nil {
-					return err
+				if finished, err = recordNativeFinish(ctx, tx, uid, it, now); err != nil {
+					return false, err
 				}
 			}
 		} else {
@@ -509,14 +514,21 @@ func (c *Catalog) SetProgress(ctx context.Context, uid int64, item, episode stri
 	}
 	_, err = tx.ExecContext(ctx, `INSERT INTO catalog_progress(id,account_id,item_id,episode_id,position,finished,updated_at,document) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(account_id,item_id,episode_id) DO UPDATE SET position=excluded.position,finished=excluded.finished,updated_at=excluded.updated_at,document=excluded.document`, doc["id"], a.ID, item, episode, number(doc["currentTime"]), truth(doc["isFinished"]), now, raw(doc))
 	if err != nil {
-		return err
+		return false, err
 	}
 	// Explicit edits revoke the old session's right to update this progress.
-	_, err = tx.ExecContext(ctx, `INSERT INTO catalog_play_heads VALUES(?,?,?,1) ON CONFLICT(account_id,item_id,episode_id) DO UPDATE SET generation=generation+1`, a.ID, item, episode)
-	if err != nil {
-		return err
+	_, positionChanged := changes["currentTime"]
+	_, finishChanged := changes["isFinished"]
+	if positionChanged || finishChanged {
+		_, err = tx.ExecContext(ctx, `INSERT INTO catalog_play_heads VALUES(?,?,?,1) ON CONFLICT(account_id,item_id,episode_id) DO UPDATE SET generation=generation+1`, a.ID, item, episode)
+		if err != nil {
+			return false, err
+		}
 	}
-	return tx.Commit()
+	if err = tx.Commit(); err != nil {
+		return false, err
+	}
+	return finished, nil
 }
 func (c *Catalog) Bookmarks(ctx context.Context, uid int64) ([]json.RawMessage, error) {
 	a, err := c.Account(ctx, uid)

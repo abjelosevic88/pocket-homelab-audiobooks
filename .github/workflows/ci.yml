@@ -14,6 +14,12 @@ jobs:
         with: { go-version-file: go.mod, cache: true }
       - name: Build web UI
         run: cd web && npm ci --no-audit --no-fund && npm run build
+      - name: Media tools for native scanner and playback tests
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+      - name: Browser playback retry tests
+        run: node scripts/test-playback-outbox.mjs
       - name: Vet & test
         run: |
           test -z "$(gofmt -l .)" || (gofmt -l . && exit 1)

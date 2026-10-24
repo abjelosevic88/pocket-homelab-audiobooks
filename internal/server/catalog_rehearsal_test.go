@@ -6,12 +6,14 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"github.com/abjelosevic88/pocket-homelab-audiobooks/internal/library"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -197,6 +199,22 @@ func TestNativeCatalogSnapshotRehearsal(t *testing.T) {
 		w := get(path, "")
 		if w.Code != 200 {
 			t.Fatalf("native route %s: %d %s", path, w.Code, w.Body.String())
+		}
+	}
+	if os.Getenv("POCKET_NATIVE_REHEARSAL_SCAN") == "1" {
+		probe, err := exec.LookPath("ffprobe")
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, lib := range libs {
+			if lib.MediaType != "book" {
+				continue
+			}
+			report, err := s.catalog().Scan(ctx, uid, lib.ID, library.ScanOptions{FFprobe: probe})
+			if err != nil {
+				t.Fatalf("real-library scan: %v", err)
+			}
+			t.Logf("Scan rehearsal: added=%d updated=%d missing=%d files=%d probed=%d unchanged=%d invalid=%d", report.Added, report.Updated, report.Missing, report.Files, report.Probed, report.Unchanged, report.Invalid)
 		}
 	}
 	t.Logf("Native snapshot verified without upstream: %d libraries, %d visible items, %d audio MIME types with exact leading/trailing byte ranges", len(libs), total, len(checked))

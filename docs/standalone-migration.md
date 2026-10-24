@@ -23,8 +23,11 @@ scripts, not by the application at runtime.
    dispatch into Go handlers in-process. The compatibility adapter makes no
    upstream requests. Actual phone-app acceptance and the remaining endpoints
    in the matrix are still required before cutover.
-3. **Library ingestion and editing.** Scanner/watcher, uploads, file moves,
-   metadata/chapters/covers, matching providers, authors/series and bulk actions.
+3. **Library ingestion and editing (core workflow implemented).** Incremental
+   scans, configurable polling for changes, persistent/cancellable scan jobs,
+   validated uploads, folder creation, metadata/chapter/cover editing and author/
+   series associations are implemented. Same-root folder moves retain IDs.
+   Provider matching, sidecars, cross-root moves, deletion and bulk tooling remain.
 4. **Remaining feature parity.** Collections/playlists, transcoding and tools,
    ebooks/ereaders, podcast lifecycle, RSS/sharing, account and operations tooling,
    and third-party client protocols. The matrix below is the acceptance scope.
@@ -88,9 +91,9 @@ as a standalone implementation.
 | Area | Required behavior | Standalone verification |
 | --- | --- | --- |
 | Libraries | Multiple libraries/folders; ordering; book and podcast media; access restrictions | Imported browse/access verified; management pending |
-| Scanning | Incremental scan, watcher, manual/rescan, missing files, regrouping, file moves | Pending |
+| Scanning | Incremental scan, watcher, manual/rescan, missing files, regrouping, file moves | Incremental/manual scans, polling, missing records and same-root moves verified; regrouping/cross-root moves pending |
 | Book ingestion | Single/multiple audio files, ebooks, tags, sidecars, chapters, covers, track order | Pending |
-| Library management | Uploads, metadata/chapter editing, bulk operations, download, safe deletion | Pending |
+| Library management | Uploads, metadata/chapter editing, bulk operations, download, safe deletion | Validated uploads, metadata/chapters/covers and single-file downloads implemented; bulk tools/deletion pending |
 | Metadata | Built-in/custom providers, matching, covers, authors, series, genres, tags, narrators | Pending |
 | Browse | Search, filters, sorts, pagination, shelves, series and authors | Pending |
 | Playback | Direct/range streaming, multi-file timeline, transcoding/HLS, seeking | Direct/multi-file playback and local seekable FFmpeg/HLS verified |
@@ -211,10 +214,47 @@ pending reports per Pocket user until acknowledged. Third-party clients that
 only send deltas without stable IDs cannot have exact retry accounting guaranteed.
 
 The backend switch is an implementation/testing option, **not yet a production
-cutover instruction**. Scanning, uploads, metadata administration, several client
-endpoints and the other rows marked pending still require independent services.
+cutover instruction**. Several client
+endpoints, metadata providers and advanced library tools and the other rows marked pending still require independent services.
 
 ```sh
 node scripts/test-playback-outbox.mjs
 go test -race ./...
 ```
+
+## Native ingestion and editor evidence
+
+Stage 3 now adds libraries, streamed/validated uploads, incremental scans,
+manual full rescans, scheduled polling (one minute to one day), cancellable jobs,
+metadata/author/series/chapter editing with stale-edit rejection, and local cover
+uploads. Go handles all orchestration and SQLite state; FFprobe/FFmpeg are local
+media tools in the same container. React uses the existing Pocket settings,
+forms, modal and book-page components.
+
+Scans preserve imported IDs and edits, never delete original files, and retain
+missing tracks so their disappearance cannot silently shift a book's timeline.
+Directory moves within a root preserve IDs using filesystem identity. New corrupt
+media aborts a scan transaction. Imported audio that already has zero duration is
+retained and counted as invalid. Uploads spool privately, validate every audio
+file, publish a new directory atomically, and refuse existing destinations.
+
+A read-only-media rehearsal scanned all three book libraries in the copied
+catalog: 24 + 1 + 1,481 books, no newly created book records and no missing books.
+It retained one pre-existing zero-duration MP3 with invalid MPEG headers. This
+file has not been repaired or removed. Two podcast items' five missing source
+records from the import remain outside these book scans.
+
+A disposable real Chromium test now verifies playback, pause/save, metadata
+editing, cover upload, scanning, uploading a new book and browsing it. It uses
+only generated audio and disposable accounts/databases, not the live household
+library. Run it after building the web assets, with a local Chrome CDP endpoint:
+
+```sh
+POCKET_NATIVE_BROWSER_CDP=http://127.0.0.1:9222 \
+  go test ./internal/server -run TestNativeBrowserAcceptance -v
+```
+
+Add `POCKET_NATIVE_REHEARSAL_SCAN=1` to the snapshot rehearsal command to exercise
+scanning against a disposable database copy. Source media remains read-only.
+FFprobe must be on PATH. The native backend remains opt-in and has not been
+switched on in production. All pending rows in the feature matrix still apply.

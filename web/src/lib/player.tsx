@@ -48,12 +48,15 @@ const LAST_KEY = 'pab-last-book'
 const REPORT_EVERY = 15 // seconds, like the Audiobookshelf apps
 const rateKey = (id: string) => `pab-rate-${id}`
 
-interface Loaded { native: boolean; book: Book; session: string; method: 'direct' | 'hls'; tracks: PlayTrack[]; chapters: Chapter[]; duration: number }
+interface Loaded { owner: number; native: boolean; book: Book; session: string; method: 'direct' | 'hls'; tracks: PlayTrack[]; chapters: Chapter[]; duration: number }
 
 export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const { settings, user } = useApp()
   const owner = useRef(user?.id)
   owner.current = user?.id
+  const reportClock = useRef({ server: Date.now(), monotonic: performance.now(), last: 0 })
+  const observedAt = () => { const c = reportClock.current; c.last = Math.max(c.last + 1, Math.round(c.server + performance.now() - c.monotonic)); return c.last }
+  const lastKey = `${LAST_KEY}:${user?.id || 'none'}`
   const { toast } = useToast()
   const audio = useMemo(() => { const a = new Audio(); a.preload = 'auto'; return a }, [])
   const [book, setBook] = useState<Book | null>(null)
@@ -95,10 +98,10 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     lastReport.current = Date.now()
     const t = opts.ended ? c.duration : globalTime()
     try {
-      if (c.native && user) {
-        const body = { report_id: crypto.randomUUID(), observed_at: Date.now(), current_time: t, listened: l, duration: c.duration, playing: !audio.paused, close: !!opts.close, ended: !!opts.ended, item_id: c.book.id, client: CLIENT_ID, device: deviceName() }
-        queueReport(user.id, c.session, body)
-        await flushReports(user.id, () => owner.current === user.id)
+      if (c.native) {
+        const body = { report_id: crypto.randomUUID(), observed_at: observedAt(), current_time: t, listened: l, duration: c.duration, playing: !audio.paused, close: !!opts.close, ended: !!opts.ended, item_id: c.book.id, client: CLIENT_ID, device: deviceName() }
+        queueReport(c.owner, c.session, body)
+        await flushReports(c.owner, () => owner.current === c.owner)
         window.dispatchEvent(new CustomEvent('pab:progress', { detail: { id: c.book.id, time: t, ended: !!opts.ended } }))
         return
       }
@@ -171,12 +174,14 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     try {
       if (user) await flushReports(user.id, () => owner.current === user.id)
       const info = await api.post<PlayInfo>(`${V1}/play/${encodeURIComponent(b.id)}`, { mime_types: playableTypes(), client: CLIENT_ID, device: deviceName(), force_transcode: !!opts.transcode })
-      const loaded: Loaded = { native: info.backend === 'native', book: info.book, session: info.session_id, method: info.method, tracks: info.tracks, chapters: info.chapters || [], duration: info.duration }
+      if (!user || owner.current !== user.id) return
+      if (info.server_time) reportClock.current = { server: info.server_time, monotonic: performance.now(), last: 0 }
+      const loaded: Loaded = { owner: user.id, native: info.backend === 'native', book: info.book, session: info.session_id, method: info.method, tracks: info.tracks, chapters: info.chapters || [], duration: info.duration }
       cur.current = loaded
       setBook(info.book)
       setChapters(loaded.chapters)
       setDuration(info.duration)
-      localStorage.setItem(LAST_KEY, b.id)
+      localStorage.setItem(lastKey, b.id)
       const r = Number(localStorage.getItem(rateKey(b.id))) || settingsRef.current?.speed || info.speed || 1
       rateRef.current = r
       setRateState(r)
@@ -253,7 +258,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     if (cur.current) report({ close: true, force: true })
     audio.pause(); hls.current?.destroy(); hls.current = null; audio.removeAttribute('src'); audio.load()
     cur.current = null; pending.current = null
-    setBook(null); setPlaying(false); setChapters([]); applyMediaSession(null); localStorage.removeItem(LAST_KEY)
+    setBook(null); setPlaying(false); setChapters([]); applyMediaSession(null); localStorage.removeItem(lastKey)
   }, [audio, report, applyMediaSession])
 
   const setSleep = useCallback((m: number | null | 'chapter') => {
@@ -319,7 +324,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       cur.current = null
       pending.current = { ...c.book, current_time: 0, finished: true } // play again from the start
       setTime(c.duration)
-      localStorage.removeItem(LAST_KEY)
+      localStorage.removeItem(lastKey)
       toast(`Finished “${c.book.title}”`)
       next()
     }
@@ -407,11 +412,11 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     const beacon = () => {
       const c = cur.current
       if (!c) return
-      const payload = { report_id: crypto.randomUUID(), observed_at: Date.now(), current_time: globalTime(), listened: listened.current, duration: c.duration, playing: false, close: true, item_id: c.book.id, client: CLIENT_ID }
-      if (c.native && user) queueReport(user.id, c.session, payload)
+      const payload = { report_id: crypto.randomUUID(), observed_at: observedAt(), current_time: globalTime(), listened: listened.current, duration: c.duration, playing: false, close: true, item_id: c.book.id, client: CLIENT_ID }
+      if (c.native) queueReport(c.owner, c.session, payload)
       const body = JSON.stringify(payload)
       listened.current = 0
-      navigator.sendBeacon?.(`${V1}/sessions/${encodeURIComponent(c.session)}/sync`, new Blob([body], { type: 'application/json' }))
+      if (c.owner === owner.current) navigator.sendBeacon?.(`${V1}/sessions/${encodeURIComponent(c.session)}/sync`, new Blob([body], { type: 'application/json' }))
     }
     const vis = () => { if (document.visibilityState === 'hidden') report({ force: true }) }
     window.addEventListener('pagehide', beacon)
@@ -429,19 +434,34 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     return () => { active = false; clearInterval(timer); window.removeEventListener('online', flush) }
   }, [user?.id])
 
+  // Changing identity clears all audible/private player state before restoring
+  // the new account's own last-book key. Native pending receipts remain scoped
+  // to their original owner and can be delivered when that owner signs in again.
+  const previousOwner = useRef(user?.id)
+  useEffect(() => {
+    if (previousOwner.current === user?.id) return
+    const c = cur.current
+    if (c?.native) queueReport(c.owner, c.session, { report_id: crypto.randomUUID(), observed_at: observedAt(), current_time: globalTime(), listened: listened.current, duration: c.duration, playing: false, close: true, item_id: c.book.id, client: CLIENT_ID })
+    previousOwner.current = user?.id
+    cur.current = null; pending.current = null; listened.current = 0
+    audio.pause(); hls.current?.destroy(); hls.current = null; audio.removeAttribute('src'); audio.load()
+    setBook(null); setPlaying(false); setLoading(false); setChapters([]); setTime(0); setDuration(0); applyMediaSession(null)
+  }, [user?.id, audio, globalTime, applyMediaSession])
+
   // restore the last book (paused) after a reload; the session opens on play
   useEffect(() => {
-    const id = localStorage.getItem(LAST_KEY)
-    if (!id || cur.current) return
+    const id = localStorage.getItem(lastKey)
+    if (!user || !id || cur.current) return
     api.get<{ book: Book }>(`${V1}/books/${encodeURIComponent(id)}`).then(({ book: b }) => {
-      if (cur.current || b.finished) { if (b.finished) localStorage.removeItem(LAST_KEY); return }
+      if (owner.current !== user.id) return
+      if (cur.current || b.finished) { if (b.finished) localStorage.removeItem(lastKey); return }
       pending.current = b
       setBook(b); setDuration(b.duration); setTime(b.current_time || 0); setChapters(b.chapter_list || [])
       const r = Number(localStorage.getItem(rateKey(b.id))) || settingsRef.current?.speed || 1
       rateRef.current = r; setRateState(r)
       applyMediaSession(b)
-    }).catch(() => localStorage.removeItem(LAST_KEY))
-  }, [applyMediaSession])
+    }).catch(() => localStorage.removeItem(lastKey))
+  }, [applyMediaSession, user?.id, lastKey])
   useEffect(() => { if (!cur.current && !pending.current && settings?.speed) { rateRef.current = settings.speed; setRateState(settings.speed) } }, [settings?.speed])
 
   // what plays elsewhere: another browser, or an Audiobookshelf app on the phone

@@ -142,7 +142,7 @@ func (s *Server) handlePlay(w http.ResponseWriter, r *http.Request) {
 	st, _ := s.store.GetSettings(ctx, u.ID)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"session_id": sess.ID, "method": ps.method, "tracks": tracksOf(sess), "current_time": sess.CurrentTime, "duration": sess.Duration,
-		"chapters": nz(sess.Chapters), "book": b, "speed": st.Speed, "backend": s.cfg.Backend,
+		"chapters": nz(sess.Chapters), "book": b, "speed": st.Speed, "backend": s.cfg.Backend, "server_time": time.Now().UnixMilli(),
 	})
 }
 

@@ -299,7 +299,7 @@ func (s *Server) nativeHistory(ctx context.Context, uid int64) error {
 	}
 	return s.store.SaveSync(ctx, uid, store.SyncState{ServerKey: "native|" + a.ID, Backfilled: true, SyncedAt: store.Now()})
 }
-func nativeGroups(items []nativeObject, key string) []nativeObject {
+func (s *Server) nativeGroups(ctx context.Context, items []nativeObject, key string) []nativeObject {
 	groups := map[string]nativeObject{}
 	for _, it := range items {
 		for _, entry := range nativeArray(nativeMetadata(it)[key]) {
@@ -327,6 +327,17 @@ func nativeGroups(items []nativeObject, key string) []nativeObject {
 	}
 	out := []nativeObject{}
 	for _, g := range groups {
+		var raw string
+		if err := s.store.DB.QueryRowContext(ctx, `SELECT document FROM catalog_entities WHERE kind=? AND id=?`, key, g["id"]).Scan(&raw); err == nil {
+			var entity nativeObject
+			if json.Unmarshal([]byte(raw), &entity) == nil {
+				for _, k := range []string{"description", "imagePath"} {
+					if entity[k] != nil {
+						g[k] = entity[k]
+					}
+				}
+			}
+		}
 		out = append(out, g)
 	}
 	sort.Slice(out, func(i, j int) bool { return nativeString(out[i]["name"]) < nativeString(out[j]["name"]) })

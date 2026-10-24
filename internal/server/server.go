@@ -53,16 +53,18 @@ type Server struct {
 	coreUIDMu sync.Mutex
 	coreUID   map[string]string // Core-held key → the Audiobookshelf user it belongs to
 
-	nativeSockets *nativeSocketHub
-	playMu        sync.Mutex
-	plays         map[string]*playState // playback session → what is playing
+	nativeScanMu     sync.Mutex
+	nativeScanCancel map[string]context.CancelFunc
+	nativeSockets    *nativeSocketHub
+	playMu           sync.Mutex
+	plays            map[string]*playState // playback session → what is playing
 
 	mux http.Handler // the router, for /audiobookshelf/… (absgateway.go)
 }
 
 // New creates a server.
 func New(cfg *config.Config, st *store.Store, log *slog.Logger, webFS fs.FS) *Server {
-	return &Server{nativeSockets: &nativeSocketHub{}, cfg: cfg, store: st, log: log, webFS: webFS, started: time.Now(), oidc: &oidcProvider{},
+	return &Server{nativeScanCancel: map[string]context.CancelFunc{}, nativeSockets: &nativeSocketHub{}, cfg: cfg, store: st, log: log, webFS: webFS, started: time.Now(), oidc: &oidcProvider{},
 		absHTTP:    &http.Client{Timeout: 30 * time.Second},
 		streamHTTP: &http.Client{Transport: &http.Transport{Proxy: http.ProxyFromEnvironment, ResponseHeaderTimeout: 60 * time.Second, IdleConnTimeout: 90 * time.Second, MaxIdleConnsPerHost: 16}},
 		core:       core.New(cfg.CoreURL, core.Options{DB: st.DB, TokenFile: cfg.DataDir + "/core.token", UserAgent: cfg.UserAgent}),
@@ -103,9 +105,27 @@ func (s *Server) Bootstrap(ctx context.Context) error {
 		s.log.Info("admin user created from environment", "email", u.Email)
 	}
 	if owner := s.store.OwnerID(ctx); owner > 0 {
+		if s.cfg.Backend == "native" {
+			var count int
+			if err = s.store.DB.QueryRowContext(ctx, `SELECT (SELECT count(*) FROM catalog_accounts)+(SELECT count(*) FROM catalog_items)`).Scan(&count); err != nil {
+				return err
+			}
+			if count == 0 {
+				_, err = s.store.DB.ExecContext(ctx, `INSERT INTO catalog_accounts VALUES(?,?,?,1,0,'{"download":true,"upload":true,"update":true,"delete":true,"accessAllLibraries":true,"accessAllTags":true,"accessExplicitContent":true}')`, "pocket-owner", owner, "Owner")
+				if err != nil {
+					return err
+				}
+			}
+		}
 		if err := s.ownerReady(ctx, owner); err != nil {
 			return err
 		}
+	}
+	if s.cfg.Backend == "native" {
+		if _, err := s.store.DB.ExecContext(ctx, `UPDATE catalog_scan_runs SET status='failed',finished_at=?,report=json_set(report,'$.error','Interrupted by server restart') WHERE status='running'`, time.Now().UnixMilli()); err != nil {
+			return err
+		}
+		go s.nativeScanLoop(ctx)
 	}
 	_ = s.store.PurgeSessions(ctx)
 	go s.janitor(ctx)
@@ -147,7 +167,7 @@ func (s *Server) ownerReady(ctx context.Context, owner int64) error {
 		}
 	}
 	// the owner's Audiobookshelf account: AUDIOBOOKSHELF_TOKEN, or AUDIOBOOKSHELF_USER + AUDIOBOOKSHELF_PASSWORD
-	if s.cfg.ABSURL != "" && (s.cfg.ABSToken != "" || s.cfg.ABSUser != "" && s.cfg.ABSPassword != "") {
+	if s.cfg.Backend != "native" && s.cfg.ABSURL != "" && (s.cfg.ABSToken != "" || s.cfg.ABSUser != "" && s.cfg.ABSPassword != "") {
 		key := fmt.Sprintf("seeded:%d:audiobookshelf", owner)
 		if _, _, done := s.store.CacheGet(ctx, key); !done {
 			if _, err := s.store.GetConnection(ctx, owner); errors.Is(err, store.ErrNotFound) {
@@ -274,6 +294,10 @@ func (s *Server) registerWithCore(ctx context.Context) error {
 		Services: []core.ServiceUse{
 			{Type: "audiobookshelf", Reason: "Your audiobooks: Pocket Audiobooks plays them with your own Audiobookshelf account, so your place, finished books and bookmarks stay yours in every app"},
 		},
+	}
+	if s.cfg.Backend == "native" {
+		m.Services = nil
+		m.Description = "Independent audiobook libraries, playback, progress and listening history for the household."
 	}
 	if s.cfg.BaseURL != "" {
 		// ask Core for a relying-party client so "Sign in with Pocket Core" needs no configuration

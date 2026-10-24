@@ -366,10 +366,19 @@ func (s *Server) handleBook(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	p := prog[id]
+	openURL := strings.TrimRight(ac.public, "/") + "/item/" + id
+	canEdit := false
+	if s.cfg.Backend == "native" {
+		openURL = ""
+		if a, e := s.catalog().Account(ctx, u.ID); e == nil {
+			canEdit = a.Permissions.Update
+		}
+	}
+
 	writeJSON(w, http.StatusOK, map[string]any{
 		"book": b, "bookmarks": marks, "series": nz(series), "up_next": inUp, "progress_id": p.ID, "started_at": p.StartedAt,
 		"listened": map[string]any{"seconds": secs, "sessions": len(ls), "first": first},
-		"open_url": strings.TrimRight(ac.public, "/") + "/item/" + id,
+		"open_url": openURL, "can_edit": canEdit, "backend": s.cfg.Backend,
 	})
 }
 

@@ -83,13 +83,13 @@ export function UploadBook({ library, onClose, onUploaded }: { library?: string;
             }} />
           </Field>
           {files.length > 0 && <div className="upload-file-list"><p>{files.length} {files.length === 1 ? 'file' : 'files'} · {bytes(total)}</p><ul>{files.map((f, i) => <li key={i}>{f.name} <span className="muted">({bytes(f.size)})</span></li>)}</ul></div>}
-          <Field label="Book title" help="Files go into a folder named after the title. Matching filenames in that folder will be replaced."><input required value={title} onChange={e => setTitle(e.target.value)} maxLength={250} /></Field>
+          <Field label="Book title" help="Files go into a folder named after the title."><input required value={title} onChange={e => setTitle(e.target.value)} maxLength={250} /></Field>
           <Field label="Author (optional)"><input value={author} onChange={e => setAuthor(e.target.value)} maxLength={250} /></Field>
           <Field label="Series (optional)"><input value={series} onChange={e => setSeries(e.target.value)} maxLength={250} /></Field>
         </fieldset>
         {tooLarge && <p className="callout danger" role="alert">The selected files exceed the {bytes(data.max_bytes)} upload limit.</p>}
         {failure && <p className="callout danger" role="alert">{failure}</p>}
-        {busy && <div role="status" aria-live="polite"><progress value={progress} max={100} aria-label="Upload progress" /><p>{progress < 100 ? `Uploading… ${progress}%` : 'Files sent. Waiting for Audiobookshelf to finish…'}</p></div>}
+        {busy && <div role="status" aria-live="polite"><progress value={progress} max={100} aria-label="Upload progress" /><p>{progress < 100 ? `Uploading… ${progress}%` : 'Files sent. Processing your book…'}</p></div>}
         <div className="row wrap"><button type="submit" className="btn primary" disabled={busy || !files.length || !title.trim() || !targetFolder || tooLarge}><Icon name="upload" size={16} />{busy ? 'Uploading…' : 'Upload book'}</button><button type="button" className="btn" onClick={close}>{busy ? 'Cancel upload' : 'Cancel'}</button></div>
       </form>}
   </Modal>

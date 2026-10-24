@@ -1,3 +1,4 @@
+import { NativeLibrarySettings } from '../components/NativeLibrarySettings'
 import { AskButton } from '../components/AskButton'
 import React, { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
@@ -30,7 +31,9 @@ export default function Settings() {
   const navigate = useNavigate()
   const mobile = useIsMobile()
   const { user } = useApp()
-  const tabs = TABS.filter(t => !t.admin || user?.role === 'admin')
+  const [native, setNative] = useState(false)
+  useEffect(() => { api.get<Connection>(`${V1}/connection`).then(c => setNative(c.backend === 'native')).catch(() => {}) }, [])
+  const tabs = TABS.filter(t => !t.admin || user?.role === 'admin').map(t => native && t.id === 'audiobookshelf' ? { ...t, label: 'Libraries', sub: 'Manage your local books and library scans.' } : t)
   const tab: TabId = tabs.find(t => t.id === raw)?.id || 'audiobookshelf'
   const current = tabs.find(t => t.id === tab)!
   const go = (id: TabId) => navigate(`/settings/${id}`, { replace: true })
@@ -63,7 +66,7 @@ export default function Settings() {
         <main className="set-content">
           <div className="set-inner" key={tab}>
             <div className="set-title"><h2>{current.label}</h2><p>{current.sub}</p></div>
-            {tab === 'audiobookshelf' && <ABSAccount />}
+            {tab === 'audiobookshelf' && (native ? <NativeLibrarySettings /> : <ABSAccount />)}
             {tab === 'playback' && <Playback />}
             {tab === 'notifications' && <Notifications />}
             {tab === 'profile' && <Profile />}

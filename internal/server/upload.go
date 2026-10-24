@@ -46,6 +46,10 @@ func (s *Server) handleUploadOptions(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
+	if s.cfg.Backend == "native" {
+		s.nativeUpload(w, r, actorID(r.Context()))
+		return
+	}
 	ac := s.ab(w, r)
 	if ac == nil {
 		return

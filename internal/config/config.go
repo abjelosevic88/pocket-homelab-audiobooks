@@ -154,7 +154,7 @@ func Load() (*Config, error) {
 		OIDCName:             env("OIDC_NAME", "single sign-on"),
 		OIDCAutoCreate:       envBool("OIDC_AUTO_CREATE", true),
 
-		FFprobe: env("FFPROBE_PATH", "ffprobe"),
+		FFprobe:      env("FFPROBE_PATH", "ffprobe"),
 		FFmpeg:       env("FFMPEG_PATH", "ffmpeg"),
 		Backend:      strings.ToLower(env("MEDIA_BACKEND", "audiobookshelf")),
 		ABSURL:       strings.TrimRight(env("AUDIOBOOKSHELF_URL", ""), "/"),

@@ -129,8 +129,8 @@ accounts without upload permission return 403 before any file bytes are forwarde
 ## Native catalog migration preview
 
 These additive endpoints read the independent local SQLite catalog. They are for
-migration verification; they do not switch the existing player's backend or
-provide native playback/progress writes yet. See [standalone migration](standalone-migration.md).
+migration verification. `MEDIA_BACKEND=native` also dispatches the existing web
+and playback-client routes to the local engine. Full parity is still in development. See [standalone migration](standalone-migration.md).
 
 All require normal Pocket authentication (session, API token, or a validated Core
 person/device token) plus an explicitly mapped native account. Core app-link
@@ -151,3 +151,26 @@ Go's `os.Root`; symlink escapes are blocked. Only audio and raster covers render
 inline. Ebooks and supplementary files are attachments and require download
 permission. All responses use private, no-store caching. A missing/restricted
 entry returns 404; absent Pocket authentication returns 401.
+
+### Native library administration
+
+These routes require `MEDIA_BACKEND=native` and the mapped account's permissions.
+Creating libraries additionally requires a Pocket administrator. Directory paths
+refer to folders already mounted into the container.
+
+| Method | Path | Result |
+| --- | --- | --- |
+| GET | `/catalog/manage` | Libraries, scan permissions, watch settings and recent scan jobs |
+| POST | `/catalog/libraries` | Create a library with `name`, `media_type`, `path` |
+| POST | `/catalog/libraries/{id}/scan` | Start a background scan; `force:true` reprobes metadata |
+| PUT | `/catalog/libraries/{id}/watch` | Set `enabled` and `interval_seconds` (60–86400) |
+| DELETE | `/catalog/scans/{job}` | Cancel a scan; its catalog transaction remains unapplied |
+| GET, PUT | `/catalog/items/{id}/editor` | Metadata/chapters with `expected_updated_at` conflict protection |
+| POST | `/catalog/items/{id}/cover` | Upload `file` as a JPEG/PNG cover |
+| POST | `/upload` | Stream multipart files into a validated new book; refuses existing destination |
+
+Native web playback reports accept `report_id`, `observed_at`, `current_time`,
+`listened`, `playing`, `close` and `ended`. Stable report IDs make retries
+idempotent. The compatibility `/api/session/{id}/sync` accepts `reportId` and
+`reportedAt` alongside the usual playback fields. Older clients without these
+fields still work, but delta-only retries cannot guarantee exact accounting.

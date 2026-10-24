@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/abjelosevic88/pocket-homelab-audiobooks/web"
 	"io"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -193,4 +195,70 @@ func TestNativeTranscodingIsLocalAndSeekable(t *testing.T) {
 	if w := nativeCall(t, h, "bad-token", "GET", "/hls/"+sid+"/index.m3u8", ""); w.Code != 401 {
 		t.Fatalf("anonymous HLS %d", w.Code)
 	}
+}
+
+// Optional real-browser acceptance, using generated media and a disposable DB.
+// No live library or notification/Core configuration is loaded.
+func TestNativeBrowserAcceptance(t *testing.T) {
+	cdp := os.Getenv("POCKET_NATIVE_BROWSER_CDP")
+	if cdp == "" {
+		t.Skip("set POCKET_NATIVE_BROWSER_CDP for Chromium acceptance")
+	}
+	ffmpeg, err := exec.LookPath("ffmpeg")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ffprobe, err := exec.LookPath("ffprobe")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, _, a, _, _ := nativeHarness(t)
+	s.cfg.FFmpeg = ffmpeg
+	s.cfg.FFprobe = ffprobe
+	if _, err = s.store.DB.Exec(`UPDATE users SET role='admin' WHERE id=?`, a.u.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.store.DB.Exec(`UPDATE catalog_accounts SET permissions=json_set(permissions,'$.upload',json('true'),'$.update',json('true')) WHERE pocket_user_id=?`, a.u.ID); err != nil {
+		t.Fatal(err)
+	}
+	var root string
+	if err = s.store.DB.QueryRow(`SELECT local_path FROM catalog_roots WHERE id='root'`).Scan(&root); err != nil {
+		t.Fatal(err)
+	}
+	if err = os.Mkdir(filepath.Join(root, "Test Book"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	for i := 1; i <= 2; i++ {
+		name := fmt.Sprintf("part%d.mp3", i)
+		cmd := exec.Command(ffmpeg, "-nostdin", "-loglevel", "error", "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000", "-t", "7", filepath.Join(root, "Test Book", name))
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("audio fixture: %v %s", err, out)
+		}
+		if _, err = s.store.DB.Exec(`UPDATE catalog_files SET relative_path=?,name=?,duration=7 WHERE item_id='book' AND id=?`, filepath.Join("Test Book", name), name, fmt.Sprint(10+i)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err = os.Remove(filepath.Join(root, "audio.mp3")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.store.DB.Exec(`UPDATE catalog_items SET duration=14,document=json_set(document,'$.media.chapters',json('[{"id":0,"start":0,"end":14,"title":"One"}]'),'$.item',json('{"path":"/media/Test Book","libraryFolderId":"folder"}')) WHERE id='book'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.store.DB.Exec(`INSERT INTO catalog_entities VALUES('libraryFolders','folder','lib','{"id":"folder","path":"/media"}')`); err != nil {
+		t.Fatal(err)
+	}
+	s.webFS, err = fs.Sub(web.Dist, "dist")
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewServer(s.Router())
+	defer server.Close()
+	script := filepath.Join("..", "..", "scripts", "test-native-browser.mjs")
+	cmd := exec.Command("node", script)
+	cmd.Env = append(os.Environ(), "BASE="+server.URL, "CDP="+cdp, "PAB_COOKIE="+a.cookie.Value, "PAB_COOKIE_NAME="+a.cookie.Name, "PAB_UPLOAD="+filepath.Join(root, "Test Book", "part1.mp3"))
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("browser: %v\n%s", err, out)
+	}
+	t.Log(string(out))
 }
