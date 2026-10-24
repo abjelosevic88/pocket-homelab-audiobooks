@@ -185,6 +185,12 @@ try {
   const metadata=await context.request.get(process.env.BASE+'/api/v1/catalog/items/'+uploaded.id+'/metadata')
   assert.equal(metadata.status(),200)
   assert.ok((await metadata.json()).tags.includes('Browser bulk tag'))
+  await page.goto(process.env.BASE+'/book/'+uploaded.id)
+  await page.getByRole('button',{name:'More',exact:true}).click()
+  await page.getByText('Manage tracks',{exact:true}).click()
+  await page.getByLabel('Replace current chapters with one chapter per included file',{exact:true}).check()
+  await page.getByRole('button',{name:'Save track order',exact:true}).click()
+  await page.getByRole('dialog',{name:'Manage tracks',exact:true}).waitFor({state:'hidden'})
   assert.deepEqual(errors, [])
-  console.log('Native browser acceptance passed: play, pause/save, metadata search/edit, scan, upload, browse, account access, collections, podcast subscription/download/play/resume, EPUB reading/resume/chapters, companion PDF paging/resume, public sharing/RSS/play/resume/revoke.')
+  console.log('Native browser acceptance passed: play, pause/save, metadata search/edit, scan, upload, browse, account access, collections, podcast subscription/download/play/resume, EPUB reading/resume/chapters, companion PDF paging/resume, public sharing/RSS/play/resume/revoke, trash/restore, episode editing, library archive/restore, bulk metadata edits/export and track settings.')
 } finally { await context.close(); await browser.close() }

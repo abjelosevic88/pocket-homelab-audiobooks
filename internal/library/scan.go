@@ -406,7 +406,7 @@ func (c *Catalog) Scan(ctx context.Context, uid int64, lib string, opt ScanOptio
 					}
 				}
 				if book == nil {
-					group := filepath.Dir(f.Source)
+					group := discGroup(f.Source, folder.Source)
 					if group == folder.Source {
 						if role == "cover" || role == "supplement" {
 							return nil
@@ -542,6 +542,25 @@ func (c *Catalog) Scan(ctx context.Context, uid int64, lib string, opt ScanOptio
 			}
 			if ai != bi {
 				return ai < bi
+			}
+			if ai == 1<<30 && bi == 1<<30 {
+				ad, at := discOrder(a)
+				bd, bt := discOrder(b)
+				if ad != bd {
+					return ad < bd
+				}
+				if at == 0 {
+					at = 1 << 30
+				}
+				if bt == 0 {
+					bt = 1 << 30
+				}
+				if at != bt {
+					return at < bt
+				}
+			}
+			if a.Name == b.Name {
+				return naturalLess(a.Source, b.Source)
 			}
 			return naturalLess(a.Name, b.Name)
 		})

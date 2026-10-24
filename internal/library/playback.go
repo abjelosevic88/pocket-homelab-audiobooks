@@ -139,6 +139,10 @@ func (c *Catalog) OpenSession(ctx context.Context, uid int64, item, episode, cli
 	if err != nil {
 		return Session{}, err
 	}
+	itemSnapshot, err := c.Item(ctx, uid, item)
+	if err != nil {
+		return Session{}, err
+	}
 	tracks, chapters, duration, err := c.Timeline(ctx, uid, item, episode)
 	if err != nil {
 		return Session{}, err
@@ -160,6 +164,14 @@ func (c *Catalog) OpenSession(ctx context.Context, uid int64, item, episode, cli
 		return Session{}, err
 	}
 	defer tx.Rollback()
+	var itemRevision int64
+	if err = tx.QueryRowContext(ctx, `SELECT updated_at FROM catalog_items WHERE id=? AND NOT EXISTS(SELECT 1 FROM catalog_removed_items r WHERE r.item_id=catalog_items.id) AND NOT EXISTS(SELECT 1 FROM catalog_library_state l WHERE l.library_id=catalog_items.library_id AND l.archived=1)`, item).Scan(&itemRevision); err != nil {
+		return Session{}, ErrConflict
+	}
+	if itemRevision != itemSnapshot.UpdatedAt {
+		return Session{}, ErrConflict
+	}
+
 	now := time.Now().UnixMilli()
 	s := Session{ID: newID(), AccountID: a.ID, ItemID: item, EpisodeID: episode, Device: device, Client: client, StartedAt: now, UpdatedAt: now, Duration: duration, Tracks: tracks, Chapters: chapters}
 	var finished bool

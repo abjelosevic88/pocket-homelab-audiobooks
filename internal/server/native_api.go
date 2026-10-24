@@ -166,6 +166,10 @@ func (s *Server) nativeAPI(w http.ResponseWriter, r *http.Request, uid int64) {
 			return
 		}
 		id := parts[2]
+		if len(parts) == 4 && parts[3] == "tracks" && method == "PATCH" {
+			s.nativeTracksCompat(w, r, uid, id)
+			return
+		}
 		if len(parts) == 3 && read {
 			it, err := s.nativeItem(ctx, uid, id)
 			if err != nil {
@@ -307,6 +311,9 @@ func (s *Server) nativeAPI(w http.ResponseWriter, r *http.Request, uid int64) {
 			report := library.Report{ID: nativeString(in["reportId"]), Position: nativeNumber(in["currentTime"]), Listened: nativeNumber(in["timeListened"]), ObservedAt: nativeMillis(in["reportedAt"]), Playing: parts[3] == "sync", Close: parts[3] == "close"}
 			if _, exists := in["currentTime"]; !exists {
 				report.Position = sess.Position
+			}
+			if playing, ok := in["playing"].(bool); ok {
+				report.Playing = playing && !report.Close
 			}
 			if report.ObservedAt == 0 {
 				report.ObservedAt = time.Now().UnixMilli()

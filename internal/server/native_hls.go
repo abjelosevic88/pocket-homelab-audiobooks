@@ -28,6 +28,10 @@ func (s *Server) nativeHLS(w http.ResponseWriter, r *http.Request, uid int64, se
 		s.nativeError(w, err)
 		return
 	}
+	if session.Closed {
+		writeErr(w, 409, "playback session ended; start a new session")
+		return
+	}
 	tracks, _, _, err := s.catalog().Timeline(r.Context(), uid, session.ItemID, session.EpisodeID)
 	if err != nil {
 		s.nativeError(w, err)

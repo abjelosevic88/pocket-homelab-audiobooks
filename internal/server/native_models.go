@@ -104,7 +104,7 @@ func (s *Server) nativeProgress(ctx context.Context, uid int64) ([]any, error) {
 		d["hideFromContinueListening"] = nativeBool(d["hideFromContinueListening"])
 		d["startedAt"] = nativeMillis(firstNative(d["startedAt"], d["createdAt"]))
 		d["finishedAt"] = nativeMillis(d["finishedAt"])
-		d["progress"] = pos / max(duration, 1)
+		d["progress"] = min(1, pos/max(duration, 1))
 		if done {
 			d["progress"] = 1
 		}

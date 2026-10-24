@@ -111,6 +111,8 @@ func (s *Server) Router() http.Handler {
 				r.Post("/catalog/libraries", s.nativeLibraryCreate)
 				r.Post("/catalog/items/batch/editor", s.nativeBulkEditor)
 				r.Put("/catalog/items/batch/editor", s.nativeBulkEditor)
+				r.Get("/catalog/items/{id}/tracks", s.nativeTracks)
+				r.Put("/catalog/items/{id}/tracks", s.nativeTracks)
 				r.Get("/catalog/items/{id}/editor", s.nativeEditor)
 				r.Put("/catalog/items/{id}/editor", s.nativeEditor)
 				r.Post("/catalog/libraries/{id}/scan", s.nativeScanStart)

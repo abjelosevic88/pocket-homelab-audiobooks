@@ -1,6 +1,7 @@
 // One book: cover, what it is, your place in it, chapters, bookmarks, the rest of its series.
 import { useEffect, useState } from 'react'
 import {TrashDialog} from '../components/TrashDialog'
+import {TrackEditor} from '../components/TrackEditor'
 import { ShareDialog } from '../components/ShareDialog'
 import { AddToList } from '../components/AddToList'
 import { BookEditor } from '../components/BookEditor'
@@ -28,6 +29,7 @@ export default function BookPage() {
   const [trashing,setTrashing]=useState(false)
   const navigate=useNavigate()
   const [editing, setEditing] = useState(false)
+  const [tracks,setTracks]=useState(false)
   const [organizing, setOrganizing] = useState(false)
   const [confirm, setConfirm] = useState<'' | 'reset' | 'finished'>('')
   useCrumb(data?.book.title)
@@ -76,11 +78,13 @@ export default function BookPage() {
     ...(data.backend==='native' && data.can_download ? [{label:'Export metadata',icon:'download',onSelect:()=>{window.location.href=`${V1}/catalog/items/${encodeURIComponent(b.id)}/metadata`}}] : []),
     ...(data.can_share ? [{ label: 'Share & RSS', icon: 'external', onSelect: () => setSharing(true) }] : []),
     ...(data.can_delete ? [{ label: 'Move to trash', icon: 'trash', onSelect: () => setTrashing(true) }] : []),
+    ...(data.can_edit && (b.files||0)>0 ? [{label:'Manage tracks',icon:'list-ordered',onSelect:()=>setTracks(true)}] : []),
     ...(data.can_edit ? [{ label: 'Edit book', icon: 'edit', onSelect: () => setEditing(true) }] : []),
     ...(data.open_url ? [{ label: 'Open in Audiobookshelf', icon: 'external', onSelect: () => window.open(data.open_url, '_blank', 'noreferrer') }] : []),
   ]
   return (
     <div className="book-page">
+      {tracks&&<TrackEditor id={id} onClose={()=>setTracks(false)} onSaved={()=>{if(here)p.stop();setTracks(false);void reload()}}/>}
       {trashing&&<TrashDialog id={id} title={b.title} onClose={()=>setTrashing(false)} onRemoved={()=>{if(here)p.stop();navigate('/trash')}}/>}
       <div className="backdrop blur" style={b.cover ? { backgroundImage: `url(${cover(b.cover, 600)})` } : undefined}><div className="backdrop-shade" /></div>
       <section className="book-hero">

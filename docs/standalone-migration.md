@@ -105,7 +105,7 @@ as a standalone implementation.
 | --- | --- | --- |
 | Libraries | Multiple libraries/folders; ordering; book and podcast media; access restrictions | Imported browse/access, multiple folders, renaming, ordering, empty-library media type changes and reversible archival implemented; browser and permission tests verify archival/restoration |
 | Scanning | Incremental scan, watcher, manual/rescan, missing files, regrouping, file moves | Incremental/manual scans, polling, missing records and same-root moves verified; regrouping/cross-root moves pending |
-| Book ingestion | Single/multiple audio files, ebooks, tags, sidecars, chapters, covers, track order | Audio tags, natural ordering, embedded chapters, covers and JSON/text sidecars verified; legacy metadata.abs import implemented; multi-disc grouping pending |
+| Book ingestion | Single/multiple audio files, ebooks, tags, sidecars, chapters, covers, track order | Audio tags, natural ordering, embedded chapters, covers and JSON/text sidecars verified; legacy metadata.abs import, CD/disc grouping and tag-aware track order implemented |
 | Library management | Uploads, metadata/chapter editing, bulk operations, download, safe deletion | Validated uploads, metadata/chapters/covers and single-file and streamed book ZIP downloads implemented; recoverable deletion/restore/purge, portable metadata exports and atomic bulk metadata editing implemented |
 | Metadata | Built-in/custom providers, matching, covers, authors, series, genres, tags, narrators | Open Library, Google Books and custom provider search/preview, detail lookup and cover fetching implemented; Open Library live contract and browser selection verified. Other built-in providers and automated matching pending |
 | Browse | Search, filters, sorts, pagination, shelves, series and authors | Pending |
@@ -362,3 +362,24 @@ Book More → Export metadata downloads portable `metadata.json` including names
 series sequences, tags and chapters. Export requires download permission and does
 not overwrite an existing sidecar or modify media files. Writing sidecars back to
 the library is still separate work.
+
+## Disc grouping and track controls
+
+New books with `Book/CD 01`, `Book/Disc 02` or `Book/Disk 03` folders are grouped
+under the book directory. Disc numbers sort before track numbers; embedded track
+numbers take precedence over natural filename ordering for new audio. Existing
+imported/manual track indices retain precedence on subsequent scans.
+
+Manage tracks and the client track-update route reorder or exclude audio without
+modifying original files. Every file must appear exactly once. A stale edit, active
+playback, invalid included audio or an empty playable timeline is rejected.
+Saved positions and bookmarks deliberately retain elapsed timestamps (the UI
+explains that reordered content can therefore change what those times point to).
+History remains unchanged. Old sessions are closed and cannot overwrite progress;
+new playback sessions verify the item revision before committing their timeline.
+
+Existing chapter metadata is preserved when valid for the resulting duration.
+The user may explicitly replace it with one chapter per included track; a shorter
+timeline that cannot contain current chapters requires this choice. Metadata can
+be exported first. Tests cover disc grouping, embedded track order, exclusion,
+chapter boundaries, stale edits/reports and preserving manual order after rescan.
