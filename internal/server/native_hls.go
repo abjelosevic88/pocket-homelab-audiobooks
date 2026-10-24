@@ -28,9 +28,19 @@ func (s *Server) nativeHLS(w http.ResponseWriter, r *http.Request, uid int64, se
 		s.nativeError(w, err)
 		return
 	}
+	// An ended session's stream keeps working while the timeline it advertised is
+	// unchanged: another device opening the book must not cut this one's buffer.
+	// Session already confines the stream to its owner and item.
 	if session.Closed {
-		writeErr(w, 409, "playback session ended; start a new session")
-		return
+		it, err := s.catalog().Item(r.Context(), uid, session.ItemID)
+		if err != nil {
+			s.nativeError(w, err)
+			return
+		}
+		if it.UpdatedAt > session.StartedAt {
+			writeErr(w, 409, "playback session ended; start a new session")
+			return
+		}
 	}
 	tracks, _, _, err := s.catalog().Timeline(r.Context(), uid, session.ItemID, session.EpisodeID)
 	if err != nil {

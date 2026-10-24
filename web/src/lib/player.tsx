@@ -1,6 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { api, V1 } from './api'
-import { flushReports, queueReport } from './playback-outbox'
+import { flushReports, onSessionEnded, queueReport } from './playback-outbox'
 import { useApp } from './app-context'
 import { useToast } from '../components/ui'
 import { CLIENT_ID, clock, cover, deviceName, markUndecodable, playableTypes } from './books'
@@ -46,6 +46,7 @@ export function usePlayer() { return useContext(Ctx) }
 
 const LAST_KEY = 'pab-last-book'
 const REPORT_EVERY = 15 // seconds, like the Audiobookshelf apps
+const RESUME_REOPEN_AFTER = 2 * 60_000 // a longer pause resumes in a fresh session
 const rateKey = (id: string) => `pab-rate-${id}`
 
 interface Loaded { owner: number; native: boolean; book: Book; session: string; method: 'direct' | 'hls'; tracks: PlayTrack[]; chapters: Chapter[]; duration: number }
@@ -76,7 +77,11 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const lastT = useRef(0)
   const lastReport = useRef(0)
   const pausedAt = useRef(0)
+  const sessionEnded = useRef(false)          // another device or an edit took over: reopen before resuming
+  const lastRenew = useRef(0)
   const sleepTimer = useRef<number | null>(null)
+  const sleepLeft = useRef<number | null>(null) // ms of a timed sleep still to play while paused
+  const sleepEnds = useRef(0)
   const sleepChapterEnd = useRef<number | null>(null)
   const hls = useRef<{ destroy: () => void } | null>(null)
   const settingsRef = useRef(settings)
@@ -89,14 +94,14 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   }, [audio])
 
   // ---- reports ----
-  const report = useCallback(async (opts: { close?: boolean; ended?: boolean; force?: boolean } = {}) => {
+  const report = useCallback(async (opts: { close?: boolean; ended?: boolean; force?: boolean; at?: number } = {}) => {
     const c = cur.current
     if (!c) return
     const l = listened.current
     if (!opts.force && !opts.close && !opts.ended && l < 1) return
     listened.current = 0
     lastReport.current = Date.now()
-    const t = opts.ended ? c.duration : globalTime()
+    const t = opts.ended ? c.duration : opts.at ?? globalTime()
     try {
       if (c.native) {
         const body = { report_id: crypto.randomUUID(), observed_at: observedAt(), current_time: t, listened: l, duration: c.duration, playing: !audio.paused, close: !!opts.close, ended: !!opts.ended, item_id: c.book.id, client: CLIENT_ID, device: deviceName() }
@@ -162,17 +167,22 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   // ---- playing a book ----
-  const play = useCallback(async (b: Book, opts: { at?: number; transcode?: boolean } = {}) => {
+  const play = useCallback(async (b: Book, opts: { at?: number; transcode?: boolean; reopen?: boolean } = {}) => {
     const same = cur.current?.book.id === b.id
-    if (same && !opts.transcode && opts.at === undefined) { audio.play().catch(() => {}); return }
-    if (same && !opts.transcode && opts.at !== undefined) { seekTo(opts.at); audio.play().catch(() => {}); return }
-    if (cur.current && !opts.transcode) { await report({ close: true, force: true }); audio.pause() }
+    if (same && !opts.transcode && !opts.reopen && opts.at === undefined) { audio.play().catch(() => {}); return }
+    if (same && !opts.transcode && !opts.reopen && opts.at !== undefined) { seekTo(opts.at); audio.play().catch(() => {}); return }
+    const pausedFor = pausedAt.current ? Date.now() - pausedAt.current : 0
+    // Close the old session first, also before a conversion: its last seconds
+    // count, and the converted session resumes from where the file failed.
+    if (cur.current) { await report({ close: true, force: true, at: opts.transcode ? opts.at : undefined }); if (!opts.transcode) audio.pause() }
+    sessionEnded.current = false
     pending.current = null
     setLoading(true)
     setBook(b)
     applyMediaSession(b)
     try {
-      if (user) await flushReports(user.id, () => owner.current === user.id)
+      // A report the server keeps refusing must not keep the book from opening.
+      if (user) await flushReports(user.id, () => owner.current === user.id).catch(() => {})
       const info = await api.post<PlayInfo>(`${V1}/play/${encodeURIComponent(b.id)}`, { mime_types: playableTypes(), client: CLIENT_ID, device: deviceName(), force_transcode: !!opts.transcode })
       if (!user || owner.current !== user.id) return
       if (info.server_time) reportClock.current = { server: info.server_time, monotonic: performance.now(), last: 0 }
@@ -189,7 +199,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       let start = opts.at ?? info.current_time ?? 0
       // after a while away, go back a few seconds to pick up the thread
       const back = settingsRef.current?.rewind_on_resume ?? 5
-      if (opts.at === undefined && !opts.transcode && back > 0 && start > 30 && (!b.last_played || Date.now() - b.last_played > 10 * 60_000)) start -= back
+      if (opts.reopen) { if (back > 0 && pausedFor > 5 * 60_000) start = Math.max(0, start - back) }
+      else if (opts.at === undefined && !opts.transcode && back > 0 && start > 30 && (!b.last_played || Date.now() - b.last_played > 10 * 60_000)) start -= back
       if (start >= info.duration - 1) start = 0
       setTime(start)
       loadTrackAt(start, true)
@@ -222,9 +233,9 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     if (!cur.current && pending.current) { const b = pending.current; play(b, { at: b.current_time }); return }
     if (!cur.current) return
     if (audio.paused) {
-      // a long pause: a few seconds back
-      const back = settingsRef.current?.rewind_on_resume ?? 5
-      if (back > 0 && pausedAt.current && Date.now() - pausedAt.current > 5 * 60_000) seekTo(globalTime() - back)
+      // Another device may have listened on meanwhile. Like Audiobookshelf, a new
+      // session starts from the newest progress (and rewinds after a long pause).
+      if (sessionEnded.current || (pausedAt.current && Date.now() - pausedAt.current > RESUME_REOPEN_AFTER)) { play(cur.current.book, { reopen: true, transcode: cur.current.method === 'hls' }); return }
       audio.play().catch(() => {})
     } else audio.pause()
   }, [audio, play, seekTo, globalTime])
@@ -261,8 +272,26 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     setBook(null); setPlaying(false); setChapters([]); applyMediaSession(null); localStorage.removeItem(lastKey)
   }, [audio, report, applyMediaSession])
 
+  // A timed sleep counts listening time only: it stops while paused and goes on
+  // with the time it had left when playback resumes.
+  const armSleep = useCallback((ms: number) => {
+    if (sleepTimer.current) { clearTimeout(sleepTimer.current); sleepTimer.current = null }
+    sleepLeft.current = ms
+    setSleepAt(Date.now() + ms)
+    if (audio.paused) return
+    sleepEnds.current = Date.now() + ms
+    sleepTimer.current = window.setTimeout(() => { sleepTimer.current = null; sleepLeft.current = null; setSleepAt(null); audio.pause(); toast('Sleep timer: paused') }, ms)
+  }, [audio, toast])
+  useEffect(() => {
+    if (playing || sleepLeft.current === null) return
+    // keep the paused countdown still
+    const t = window.setInterval(() => { if (sleepLeft.current !== null) setSleepAt(Date.now() + sleepLeft.current) }, 15000)
+    return () => clearInterval(t)
+  }, [playing, sleepAt])
+
   const setSleep = useCallback((m: number | null | 'chapter') => {
     if (sleepTimer.current) { clearTimeout(sleepTimer.current); sleepTimer.current = null }
+    sleepLeft.current = null
     sleepChapterEnd.current = null
     setSleepChapter(false)
     if (!m) { setSleepAt(null); return }
@@ -274,9 +303,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       setSleepAt(Date.now() + ((end - time) / (rateRef.current || 1)) * 1000)
       return
     }
-    setSleepAt(Date.now() + m * 60000)
-    sleepTimer.current = window.setTimeout(() => { audio.pause(); setSleepAt(null); sleepTimer.current = null; toast('Sleep timer: paused') }, m * 60000)
-  }, [audio, chapter, time, toast])
+    armSleep(m * 60000)
+  }, [armSleep, chapter, time, toast])
 
   const bookmark = useCallback(async () => {
     const c = cur.current
@@ -301,11 +329,19 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
   // ---- audio events ----
   useEffect(() => {
-    const onPlay = () => { setPlaying(true); lastT.current = audio.currentTime; pausedAt.current = 0 }
+    const onPlay = () => {
+      setPlaying(true); lastT.current = audio.currentTime; pausedAt.current = 0
+      if (sleepLeft.current !== null && !sleepTimer.current) armSleep(sleepLeft.current)
+    }
     const onPlaying = () => setLoading(false)
     const onPause = () => {
       setPlaying(false)
       pausedAt.current = Date.now()
+      if (sleepTimer.current) {
+        clearTimeout(sleepTimer.current); sleepTimer.current = null
+        sleepLeft.current = Math.max(0, sleepEnds.current - Date.now())
+        setSleepAt(Date.now() + sleepLeft.current)
+      }
       if (cur.current && !audio.ended) report({ force: true })
     }
     const onWaiting = () => setLoading(true)
@@ -365,7 +401,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       audio.removeEventListener('play', onPlay); audio.removeEventListener('playing', onPlaying); audio.removeEventListener('pause', onPause); audio.removeEventListener('waiting', onWaiting)
       audio.removeEventListener('ended', onEnded); audio.removeEventListener('timeupdate', onTime); audio.removeEventListener('error', onError)
     }
-  }, [audio, report, attach, next, toast, play, globalTime])
+  }, [audio, report, attach, next, toast, play, globalTime, armSleep])
 
   // ---- lock screen / keyboard ----
   useEffect(() => {
@@ -433,6 +469,30 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     window.addEventListener('online', flush)
     return () => { active = false; clearInterval(timer); window.removeEventListener('online', flush) }
   }, [user?.id])
+
+  // The server ended this session (another device opened the book, or progress
+  // was edited); its reports no longer move progress. While audio plays here,
+  // this is the device being listened to: carry on in a new session at most every
+  // few minutes, so two playing devices do not keep taking it from each other.
+  // Otherwise the next resume reopens from the newest progress.
+  useEffect(() => {
+    onSessionEnded(sid => {
+      const c = cur.current
+      if (!c || c.session !== sid) return
+      if (audio.paused || Date.now() - lastRenew.current < 5 * 60_000) { sessionEnded.current = true; return }
+      lastRenew.current = Date.now()
+      api.post<PlayInfo>(`${V1}/play/${encodeURIComponent(c.book.id)}`, { mime_types: playableTypes(), client: CLIENT_ID, device: deviceName(), force_transcode: c.method === 'hls' })
+        .then(info => {
+          if (cur.current !== c) return
+          // Direct file URLs do not depend on the session, and the old stream keeps
+          // serving an unchanged timeline, so the audio continues untouched.
+          c.session = info.session_id
+          if (info.method === c.method && info.tracks.length === c.tracks.length) c.tracks = info.tracks
+        })
+        .catch(() => { if (cur.current === c) sessionEnded.current = true })
+    })
+    return () => onSessionEnded(null)
+  }, [audio])
 
   // Changing identity clears all audible/private player state before restoring
   // the new account's own last-book key. Native pending receipts remain scoped

@@ -51,6 +51,37 @@ func (s *Server) nativeListeningStats(w http.ResponseWriter, r *http.Request, ui
 		s.nativeError(w, err)
 		return
 	}
+	a, err := s.catalog().Account(r.Context(), uid)
+	if err != nil {
+		s.nativeError(w, err)
+		return
+	}
+	// One grouped read of the daily splits replaces a query per native session.
+	rows, err := s.store.DB.QueryContext(r.Context(), `SELECT d.session_id,d.day,d.seconds FROM catalog_play_days d JOIN catalog_play_sessions p ON p.id=d.session_id WHERE p.account_id=?`, a.ID)
+	if err != nil {
+		s.nativeError(w, err)
+		return
+	}
+	split := map[string]map[string]float64{}
+	for rows.Next() {
+		var id, day string
+		var secs float64
+		if err = rows.Scan(&id, &day, &secs); err != nil {
+			rows.Close()
+			s.nativeError(w, err)
+			return
+		}
+		if split[id] == nil {
+			split[id] = map[string]float64{}
+		}
+		split[id][day] += secs
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		s.nativeError(w, err)
+		return
+	}
 	days := map[string]float64{}
 	items := map[string]bool{}
 	total := 0.0
@@ -63,26 +94,8 @@ func (s *Server) nativeListeningStats(w http.ResponseWriter, r *http.Request, ui
 		items[nativeString(sess["libraryItemId"])] = true
 		// Native sessions can cross midnight. Daily splits preserve wall time.
 		if nativeString(sess["mediaPlayer"]) == "pocket-audiobooks-native" {
-			rows, err := s.store.DB.QueryContext(r.Context(), `SELECT day,seconds FROM catalog_play_days WHERE session_id=?`, sess["id"])
-			if err != nil {
-				s.nativeError(w, err)
-				return
-			}
-			for rows.Next() {
-				var day string
-				var secs float64
-				if err = rows.Scan(&day, &secs); err != nil {
-					rows.Close()
-					s.nativeError(w, err)
-					return
-				}
+			for day, secs := range split[nativeString(sess["id"])] {
 				days[day] += secs
-			}
-			err = rows.Err()
-			rows.Close()
-			if err != nil {
-				s.nativeError(w, err)
-				return
 			}
 		} else {
 			day := nativeString(sess["date"])

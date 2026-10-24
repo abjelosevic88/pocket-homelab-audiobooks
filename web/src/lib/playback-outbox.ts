@@ -1,4 +1,4 @@
-import { api, V1 } from './api'
+import { api, ApiError, V1 } from './api'
 
 export interface PlaybackReport {
   report_id: string
@@ -17,6 +17,14 @@ interface Pending { session: string; report: PlaybackReport }
 const prefix = (uid: number) => `pab:reports:${uid}:`
 const memory = new Map<string, Pending>()
 const flights = new Map<number, Promise<void>>()
+// The server will never accept these; retrying them would block every later
+// report behind them. Network failures and 5xx keep the entry for a retry.
+const PERMANENT = new Set([400, 404, 409, 410, 422])
+let endedHandler: ((session: string) => void) | null = null
+
+/** Called when the server says a session had already ended (another device
+ *  opened the book, or progress was edited): the player then reopens one. */
+export function onSessionEnded(fn: ((session: string) => void) | null) { endedHandler = fn }
 
 // One entry per receipt avoids tabs overwriting each other's queues. No tokens
 // are stored. Re-sending a receipt is safe even if a beacon reached the server.
@@ -49,7 +57,13 @@ export function flushReports(uid: number, active: () => boolean): Promise<void> 
       const [key, entry] = entryPair
       if (!active()) return
       // Retain the exact payload until acknowledged, including its timestamp.
-      await api.post(`${V1}/sessions/${encodeURIComponent(entry.session)}/sync`, entry.report)
+      try {
+        const r = await api.post<{ session_ended?: boolean }>(`${V1}/sessions/${encodeURIComponent(entry.session)}/sync`, entry.report)
+        if (r?.session_ended && !entry.report.close && !entry.report.ended) endedHandler?.(entry.session)
+      } catch (e) {
+        if (!(e instanceof ApiError) || !PERMANENT.has(e.status)) throw e
+        console.warn('playback report rejected, dropping it', e.status, e.message, entry.report)
+      }
       memory.delete(key)
       try { localStorage.removeItem(key) } catch { /* future retries are idempotent */ }
     }

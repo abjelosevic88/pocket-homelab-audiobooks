@@ -25,7 +25,11 @@ func TestNativeTrackEditingClientPermissionsAndHistory(t *testing.T) {
 	if w := nativeCall(t, h, tok, "GET", "/hls/"+sid+"/output.m3u8", ""); w.Code != 409 {
 		t.Fatal("stale HLS reused", w.Code)
 	}
-	jsonObject(t, nativeCall(t, h, tok, "POST", "/api/session/"+sid+"/sync", `{"reportId":"track-late","currentTime":25,"timeListened":5,"playing":true}`))
+	// A sync after close is answered like Audiobookshelf (404, so apps reopen),
+	// but its listening still counts and its old timeline never moves progress.
+	if w := nativeCall(t, h, tok, "POST", "/api/session/"+sid+"/sync", `{"reportId":"track-late","currentTime":25,"timeListened":5,"playing":true}`); w.Code != 404 {
+		t.Fatal("sync to ended session", w.Code)
+	}
 	var pos float64
 	s.store.DB.QueryRow(`SELECT position FROM catalog_progress WHERE account_id='alice' AND item_id='book'`).Scan(&pos)
 	if pos != 20 {

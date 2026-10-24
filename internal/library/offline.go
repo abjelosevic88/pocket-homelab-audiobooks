@@ -51,9 +51,9 @@ func (c *Catalog) SyncOffline(ctx context.Context, uid int64, in OfflineSession)
 	if err != nil {
 		return out, err
 	}
-	if in.Position > duration+1 || in.StartPosition > duration+1 {
-		return out, ErrInvalid
-	}
+	// Clamp like online reports: a slightly longer client timeline is not an
+	// error the device could ever fix by retrying.
+	in.Position, in.StartPosition = math.Min(in.Position, duration), math.Min(in.StartPosition, duration)
 	id := offlineKey(a.ID, in.ID)
 	digest := sha256.Sum256([]byte(raw(in)))
 	receipt := "offline-receipt-" + hex.EncodeToString(digest[:])

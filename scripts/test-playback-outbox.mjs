@@ -59,3 +59,38 @@ test('a close queued during a pending request is drained before reopening playba
   assert.deepEqual(seen, ['periodic', 'close'])
   assert.equal(localStorage.length, 0)
 })
+test('a permanently rejected report is dropped instead of blocking later ones', async () => {
+  localStorage.entries.clear()
+  const box = await load('reject')
+  const seen = []
+  let status = 503
+  globalThis.fetch = async (_, options) => {
+    const body = JSON.parse(options.body); seen.push(body.report_id)
+    if (body.report_id === 'bad') return { ok: false, status, statusText: 'rejected', json: async () => ({ error: 'invalid request' }) }
+    return { ok: true, status: 200, json: async () => ({ ok: true }) }
+  }
+  const warn = console.warn
+  console.warn = () => {}
+  try {
+    // A server outage keeps the report for a retry.
+    box.queueReport(1, 'session', { ...receipt('bad'), observed_at: 1 })
+    box.queueReport(1, 'session', { ...receipt('good'), observed_at: 2 })
+    await assert.rejects(box.flushReports(1, () => true))
+    assert.equal(localStorage.length, 2)
+    status = 400
+    await box.flushReports(1, () => true)
+  } finally { console.warn = warn }
+  assert.deepEqual(seen, ['bad', 'bad', 'good'])
+  assert.equal(localStorage.length, 0)
+})
+test('a report to an ended session asks the player to reopen', async () => {
+  localStorage.entries.clear()
+  const box = await load('ended')
+  const ended = []
+  box.onSessionEnded(sid => ended.push(sid))
+  globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => ({ ok: true, session_ended: true }) })
+  box.queueReport(1, 'replaced', receipt('periodic'))
+  box.queueReport(1, 'closing', { ...receipt('close'), observed_at: 2000, close: true })
+  await box.flushReports(1, () => true)
+  assert.deepEqual(ended, ['replaced'])
+})

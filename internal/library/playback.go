@@ -19,6 +19,14 @@ var ErrInvalid = errors.New("invalid request")
 var ErrConflict = errors.New("update conflicts with saved data; refresh and try again")
 var ErrNoAudio = errors.New("this item has no playable audio")
 
+// Listening within this many seconds of the end marks a book finished, like
+// Audiobookshelf. Credits and silence trimmed by encoders are often longer than 1s.
+const finishedWithinSeconds = 10.0
+
+// Receipts only guard retries; closed sessions' receipts older than this are
+// pruned, and reports observed before it on closed online sessions are ignored.
+const reportRetention = 30 * 24 * time.Hour
+
 func newID() string               { return "native-" + rand.Text() }
 func validSeconds(n float64) bool { return n >= 0 && !math.IsNaN(n) && !math.IsInf(n, 0) }
 
@@ -195,6 +203,11 @@ func (c *Catalog) OpenSession(ctx context.Context, uid int64, item, episode, cli
 	if err != nil {
 		return s, err
 	}
+	// Opening playback is infrequent, so prune this account's old receipts here
+	// instead of running another background loop.
+	if _, err = tx.ExecContext(ctx, `DELETE FROM catalog_play_reports WHERE account_id=? AND received_at<? AND session_id IN (SELECT id FROM catalog_play_sessions WHERE account_id=? AND closed=1)`, a.ID, now-reportRetention.Milliseconds(), a.ID); err != nil {
+		return s, err
+	}
 	return s, tx.Commit()
 }
 func (c *Catalog) Session(ctx context.Context, uid int64, id string) (Session, error) {
@@ -223,12 +236,18 @@ type Report struct {
 	Playing    bool    `json:"playing"`
 	Close      bool    `json:"close"`
 	Ended      bool    `json:"ended"`
+	// Replay treats a reused ID with a different payload as a retry. Callers set
+	// it only when the ID itself is derived from the client's payload.
+	Replay bool `json:"-"`
 }
 type ReportResult struct {
 	SessionID       string `json:"session_id,omitempty"`
 	Duplicate       bool   `json:"duplicate"`
 	ProgressApplied bool   `json:"progress_applied"`
 	FinishedNow     bool   `json:"finished_now"`
+	// SessionEnded reports that another device, an edit or an earlier close had
+	// already ended this session; its listening counted but progress did not.
+	SessionEnded bool `json:"session_ended"`
 }
 
 // ReportSession commits its receipt, session, progress, daily history and finish
@@ -247,9 +266,9 @@ func (c *Catalog) ReportSession(ctx context.Context, uid int64, id string, r Rep
 	if err != nil {
 		return out, err
 	}
-	if r.Position > session.Duration+1 {
-		return out, ErrInvalid
-	}
+	// Players' durations can differ slightly from the probed timeline. Clamp the
+	// position instead of rejecting a report that a client would retry forever.
+	r.Position = math.Min(r.Position, session.Duration)
 	tx, err := c.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return out, err
@@ -273,10 +292,16 @@ func reportSessionTx(ctx context.Context, tx *sql.Tx, uid int64, it Item, sessio
 	fingerprint := sha256.Sum256([]byte(id + raw(r)))
 	hash := hex.EncodeToString(fingerprint[:])
 	var err error
+	var generation int64
+	if err = tx.QueryRowContext(ctx, `SELECT generation FROM catalog_play_heads WHERE account_id=? AND item_id=? AND episode_id=?`, session.AccountID, session.ItemID, session.EpisodeID).Scan(&generation); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return out, err
+	}
+	latest := generation == session.Generation
+	out.SessionEnded = session.Generation >= 0 && (session.Closed || !latest)
 	var old string
 	err = tx.QueryRowContext(ctx, `SELECT fingerprint FROM catalog_play_reports WHERE account_id=? AND id=?`, session.AccountID, r.ID).Scan(&old)
 	if err == nil {
-		if old != hash {
+		if old != hash && !r.Replay {
 			return out, ErrConflict
 		}
 		out.Duplicate = true
@@ -286,15 +311,15 @@ func reportSessionTx(ctx context.Context, tx *sql.Tx, uid int64, it Item, sessio
 		return out, err
 	}
 	now := time.Now()
+	if session.Generation >= 0 && session.Closed && r.ObservedAt < now.Add(-reportRetention).UnixMilli() {
+		// Its receipt may already be pruned; counting it again could double it.
+		out.Duplicate = true
+		return out, nil
+	}
 	if _, err = tx.ExecContext(ctx, `INSERT INTO catalog_play_reports VALUES(?,?,?,?,?)`, session.AccountID, r.ID, id, hash, now.UnixMilli()); err != nil {
 		return out, err
 	}
-	var generation int64
-	if err = tx.QueryRowContext(ctx, `SELECT generation FROM catalog_play_heads WHERE account_id=? AND item_id=? AND episode_id=?`, session.AccountID, session.ItemID, session.EpisodeID).Scan(&generation); err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return out, err
-	}
 	newer := r.ObservedAt > session.ObservedAt
-	latest := generation == session.Generation
 	if session.Generation < 0 {
 		// Offline reports can be newer than the last online session, but an old
 		// upload must not steal the position of a device that started later.
@@ -338,7 +363,7 @@ func reportSessionTx(ctx context.Context, tx *sql.Tx, uid int64, it Item, sessio
 					return out, err
 				}
 			}
-			finished := r.Ended || (r.Position >= session.Duration-1 && r.Listened > 0)
+			finished := r.Ended || (session.Duration-r.Position <= finishedWithinSeconds && r.Listened > 0)
 			// A previously finished book starts a new read only once playback resumes.
 			if !finished && truth(progress["isFinished"]) && r.Listened == 0 {
 				finished = true
@@ -457,11 +482,18 @@ func (c *Catalog) RecentSessions(ctx context.Context, uid int64, limit int) ([]S
 		return nil, err
 	}
 	out := []Session{}
+	visible := map[string]bool{}
 	for _, s := range all {
-		if _, err = c.Item(ctx, uid, s.ItemID); err == nil {
+		ok, seen := visible[s.ItemID]
+		if !seen {
+			if _, err = c.Item(ctx, uid, s.ItemID); err != nil && !errors.Is(err, ErrNotFound) {
+				return nil, err
+			}
+			ok = err == nil
+			visible[s.ItemID] = ok
+		}
+		if ok {
 			out = append(out, s)
-		} else if !errors.Is(err, ErrNotFound) {
-			return nil, err
 		}
 	}
 	return out, nil

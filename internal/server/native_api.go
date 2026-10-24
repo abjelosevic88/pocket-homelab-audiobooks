@@ -314,12 +314,25 @@ func (s *Server) nativeAPI(w http.ResponseWriter, r *http.Request, uid int64) {
 				report.ObservedAt = time.Now().UnixMilli()
 			}
 			if report.ID == "" {
-				sum := sha256.Sum256([]byte(sid + string(nativeJSON(in))))
-				report.ID = "compat-" + hex.EncodeToString(sum[:]) + "-" + strconv.FormatInt(report.ObservedAt, 10)
+				// Audiobookshelf apps send no receipt ID. Derive one from the fields a
+				// retry repeats verbatim, so a resent sync is a duplicate, not a delta.
+				key := nativeObject{"kind": parts[3]}
+				for _, k := range []string{"currentTime", "timeListened", "duration", "updatedAt", "reportedAt", "syncedAt"} {
+					key[k] = in[k]
+				}
+				sum := sha256.Sum256([]byte(sid + "\x00" + string(nativeJSON(key))))
+				report.ID = "compat-" + hex.EncodeToString(sum[:])
+				report.Replay = true
 			}
 			out, err := c.ReportSession(ctx, uid, sid, report)
 			if err != nil {
 				s.nativeError(w, err)
+				return
+			}
+			if out.SessionEnded && parts[3] == "sync" {
+				// Audiobookshelf answers 404 for sessions it no longer holds; its apps
+				// then open a new session from the newest progress. Listening counted.
+				writeErr(w, 404, "playback session ended; start a new session")
 				return
 			}
 			if out.ProgressApplied {
@@ -531,9 +544,21 @@ func (s *Server) nativeSessions(ctx context.Context, uid int64) ([]nativeObject,
 	if err != nil {
 		return nil, err
 	}
+	// Many sessions share a book; build each item's wire object only once.
+	items := map[string]nativeObject{}
+	item := func(id string) (nativeObject, error) {
+		if it, ok := items[id]; ok {
+			return it, nil
+		}
+		it, err := s.nativeItem(ctx, uid, id)
+		if err == nil {
+			items[id] = it
+		}
+		return it, err
+	}
 	out := []nativeObject{}
 	for _, sess := range sessions {
-		it, err := s.nativeItem(ctx, uid, sess.ItemID)
+		it, err := item(sess.ItemID)
 		if err != nil {
 			return nil, err
 		}
@@ -566,7 +591,7 @@ func (s *Server) nativeSessions(ctx context.Context, uid int64) ([]nativeObject,
 		if !r.item.Valid {
 			continue
 		}
-		it, err := s.nativeItem(ctx, uid, r.item.String)
+		it, err := item(r.item.String)
 		if errors.Is(err, library.ErrNotFound) {
 			continue
 		}
@@ -820,7 +845,7 @@ func (s *Server) nativeWebSync(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	writeJSON(w, 200, nativeObject{"ok": true, "duplicate": out.Duplicate, "progress_applied": out.ProgressApplied})
+	writeJSON(w, 200, nativeObject{"ok": true, "duplicate": out.Duplicate, "progress_applied": out.ProgressApplied, "session_ended": out.SessionEnded})
 }
 
 // Read durable sessions so another device remains visible after a server restart.
