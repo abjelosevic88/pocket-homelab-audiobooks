@@ -53,15 +53,16 @@ type Server struct {
 	coreUIDMu sync.Mutex
 	coreUID   map[string]string // Core-held key → the Audiobookshelf user it belongs to
 
-	playMu sync.Mutex
-	plays  map[string]*playState // playback session → what is playing
+	nativeSockets *nativeSocketHub
+	playMu        sync.Mutex
+	plays         map[string]*playState // playback session → what is playing
 
 	mux http.Handler // the router, for /audiobookshelf/… (absgateway.go)
 }
 
 // New creates a server.
 func New(cfg *config.Config, st *store.Store, log *slog.Logger, webFS fs.FS) *Server {
-	return &Server{cfg: cfg, store: st, log: log, webFS: webFS, started: time.Now(), oidc: &oidcProvider{},
+	return &Server{nativeSockets: &nativeSocketHub{}, cfg: cfg, store: st, log: log, webFS: webFS, started: time.Now(), oidc: &oidcProvider{},
 		absHTTP:    &http.Client{Timeout: 30 * time.Second},
 		streamHTTP: &http.Client{Transport: &http.Transport{Proxy: http.ProxyFromEnvironment, ResponseHeaderTimeout: 60 * time.Second, IdleConnTimeout: 90 * time.Second, MaxIdleConnsPerHost: 16}},
 		core:       core.New(cfg.CoreURL, core.Options{DB: st.DB, TokenFile: cfg.DataDir + "/core.token", UserAgent: cfg.UserAgent}),

@@ -13,7 +13,9 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/abjelosevic88/pocket-homelab-audiobooks/internal/store"
 )
@@ -48,6 +50,7 @@ func TestNativeCatalogSnapshotRehearsal(t *testing.T) {
 	}
 	defer st.Close()
 	cfg := testConfig(temp)
+	cfg.Backend = "native"
 	s := New(cfg, st, log, nil)
 	blocked := gatewayTransport(func(*http.Request) (*http.Response, error) {
 		t.Error("rehearsal called an upstream service")
@@ -146,6 +149,42 @@ func TestNativeCatalogSnapshotRehearsal(t *testing.T) {
 		}
 		file.Close()
 		checked[sample.mime] = true
+		playPath := "/api/items/" + sample.item + "/play"
+		item, err := s.nativeItem(ctx, uid, sample.item)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if item["mediaType"] == "podcast" {
+			found := false
+			for _, v := range nativeArray(nativeMap(item["media"])["episodes"]) {
+				e := nativeMap(v)
+				if nativeString(nativeMap(e["audioFile"])["ino"]) == sample.file {
+					playPath += "/" + nativeString(e["id"])
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Fatal("episode mapping missing")
+			}
+		}
+		play := httptest.NewRequest("POST", playPath, strings.NewReader(`{"deviceInfo":{"deviceId":"rehearsal"},"forceDirectPlay":true}`))
+		play.Header.Set("Authorization", "Bearer "+tok)
+		pw := httptest.NewRecorder()
+		h.ServeHTTP(pw, play)
+		info := jsonObject(t, pw)
+		if len(nativeArray(info["audioTracks"])) < 1 {
+			t.Fatal("missing native playback tracks")
+		}
+		body := string(nativeJSON(nativeObject{"reportId": "rehearsal-" + sample.mime, "reportedAt": time.Now().UnixMilli(), "currentTime": nativeNumber(info["currentTime"]) + 1, "timeListened": 1}))
+		report := httptest.NewRequest("POST", "/api/session/"+nativeString(info["id"])+"/sync", strings.NewReader(body))
+		report.Header.Set("Authorization", "Bearer "+tok)
+		rw := httptest.NewRecorder()
+		h.ServeHTTP(rw, report)
+		if rw.Code != 200 {
+			t.Fatalf("native report: %d %s", rw.Code, rw.Body.String())
+		}
+
 	}
 	if len(checked) < 2 {
 		t.Fatalf("only %d media types verified", len(checked))
@@ -153,6 +192,12 @@ func TestNativeCatalogSnapshotRehearsal(t *testing.T) {
 	w := get("/api/v1/catalog/me/progress", "")
 	if w.Code != 200 {
 		t.Fatalf("progress: %d", w.Code)
+	}
+	for _, path := range []string{"/api/v1/home", "/api/v1/libraries", "/api/v1/stats", "/api/me/items-in-progress", "/api/me/listening-stats"} {
+		w := get(path, "")
+		if w.Code != 200 {
+			t.Fatalf("native route %s: %d %s", path, w.Code, w.Body.String())
+		}
 	}
 	t.Logf("Native snapshot verified without upstream: %d libraries, %d visible items, %d audio MIME types with exact leading/trailing byte ranges", len(libs), total, len(checked))
 }

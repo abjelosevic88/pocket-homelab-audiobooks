@@ -25,6 +25,8 @@ type Client struct {
 	Base      string // http(s)://host[:port][/audiobookshelf]
 	UserAgent string
 	HTTP      *http.Client
+	// LocalTransport implements the wire protocol in process for the native Go backend.
+	LocalTransport http.RoundTripper
 
 	mu    sync.Mutex
 	token string
@@ -98,6 +100,11 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) { return c.DoWith
 
 // DoWith is Do with another HTTP client (streams: no overall timeout).
 func (c *Client) DoWith(hc *http.Client, req *http.Request) (*http.Response, error) {
+	if c.LocalTransport != nil {
+		copy := *hc
+		copy.Transport = c.LocalTransport
+		hc = &copy
+	}
 	res, err := hc.Do(req)
 	if err != nil || res.StatusCode != http.StatusUnauthorized || c.Refresh == nil || req.Body != nil && req.GetBody == nil {
 		return res, err

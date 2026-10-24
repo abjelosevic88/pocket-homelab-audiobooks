@@ -67,6 +67,9 @@ func (s *Server) syncAll(ctx context.Context) {
 
 // syncUser copies what changed in one person's listening sessions since the last look.
 func (s *Server) syncUser(ctx context.Context, uid int64, full bool) error {
+	if s.cfg.Backend == "native" {
+		return s.nativeHistory(ctx, uid)
+	}
 	s.syncMu.Lock()
 	if s.syncing[uid] {
 		s.syncMu.Unlock()

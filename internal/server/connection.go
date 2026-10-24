@@ -103,6 +103,9 @@ func (s *Server) absFor(ctx context.Context, u *store.User) (*absConn, error) {
 	if u == nil {
 		return nil, &errNoABS{"nobody signed in"}
 	}
+	if s.cfg.Backend == "native" {
+		return s.nativeConnection(ctx, u)
+	}
 	c, err := s.store.GetConnection(ctx, u.ID)
 	if err != nil && !errors.Is(err, store.ErrNotFound) {
 		return nil, err
@@ -275,6 +278,11 @@ func (s *Server) absErr(w http.ResponseWriter, err error) {
 func (s *Server) handleConnection(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	u := userFrom(ctx)
+	if s.cfg.Backend == "native" {
+		_, err := s.catalog().Account(ctx, u.ID)
+		writeJSON(w, http.StatusOK, map[string]any{"connected": err == nil, "kind": "native", "mode": "native", "username": u.Name, "server_url": false, "backend": "native", "core": s.coreConnected(), "core_configured": s.core.Configured(), "sync": s.store.GetSync(ctx, u.ID)})
+		return
+	}
 	c, _ := s.store.GetConnection(ctx, u.ID)
 	out := map[string]any{
 		"server_url":      s.cfg.ABSURL != "",

@@ -77,6 +77,10 @@ func (s *Server) handleGateway(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusUnauthorized, "use a Pocket Audiobooks API token or Pocket Core device token")
 		return
 	}
+	if s.cfg.Backend == "native" {
+		s.nativeAPI(w, r, u.ID)
+		return
+	}
 	if !gatewayAllowed(r.Method, r.URL.Path) {
 		writeErr(w, http.StatusForbidden, "this Audiobookshelf operation is not available through Pocket Audiobooks")
 		return
@@ -245,6 +249,10 @@ func gatewayText(text string, ac *absConn, token string) string {
 }
 
 func (s *Server) handleGatewayStatus(w http.ResponseWriter, r *http.Request) {
+	if s.cfg.Backend == "native" {
+		writeJSON(w, http.StatusOK, map[string]any{"app": "audiobookshelf", "serverVersion": "2.37.2", "backend": "Pocket Audiobooks native", "isInit": true, "authMethods": []string{"local"}, "language": "en-us"})
+		return
+	}
 	st, err := s.newABS(s.cfg.ABSURL, "").Status(r.Context())
 	if err != nil {
 		writeErr(w, http.StatusServiceUnavailable, "Audiobookshelf unavailable")

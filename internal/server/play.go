@@ -142,12 +142,16 @@ func (s *Server) handlePlay(w http.ResponseWriter, r *http.Request) {
 	st, _ := s.store.GetSettings(ctx, u.ID)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"session_id": sess.ID, "method": ps.method, "tracks": tracksOf(sess), "current_time": sess.CurrentTime, "duration": sess.Duration,
-		"chapters": nz(sess.Chapters), "book": b, "speed": st.Speed,
+		"chapters": nz(sess.Chapters), "book": b, "speed": st.Speed, "backend": s.cfg.Backend,
 	})
 }
 
 // handleSync is the player's report: where it is and how much it played since the last one.
 func (s *Server) handleSync(w http.ResponseWriter, r *http.Request) {
+	if s.cfg.Backend == "native" {
+		s.nativeWebSync(w, r)
+		return
+	}
 	ctx := r.Context()
 	u := userFrom(ctx)
 	var in struct {
@@ -285,6 +289,10 @@ func (s *Server) recordFinish(ctx context.Context, u *store.User, it *abs.Item, 
 // with this app, or in any Audiobookshelf app (from their newest listening
 // session), so the web can offer "Continue here".
 func (s *Server) handleNowPlaying(w http.ResponseWriter, r *http.Request) {
+	if s.cfg.Backend == "native" {
+		s.nativeNowPlaying(w, r)
+		return
+	}
 	ctx := r.Context()
 	u := userFrom(ctx)
 	mine := r.URL.Query().Get("session")
@@ -386,7 +394,7 @@ func (s *Server) sweepPlays(ctx context.Context) {
 
 // ---- streaming ----
 
-var mediaPathRE = regexp.MustCompile(`^/(api/items/[0-9A-Za-z-]+/file/[0-9]+|hls/[0-9A-Za-z-]+/[0-9A-Za-z_.-]+)$`)
+var mediaPathRE = regexp.MustCompile(`^/(api/items/[0-9A-Za-z-]+/file/[0-9A-Za-z_-]+|hls/[0-9A-Za-z-]+/[0-9A-Za-z_.-]+)$`)
 
 // handleMedia streams a book's file, or an HLS playlist or segment, with the
 // person's key added (byte ranges pass through, so seeking is instant).

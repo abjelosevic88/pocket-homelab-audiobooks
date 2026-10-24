@@ -1,6 +1,6 @@
 # Standalone Pocket Audiobooks migration
 
-Status: stage 1 implemented and rehearsed; the live application still uses
+Status: stages 1–2 implemented and rehearsed; the live application still uses
 Audiobookshelf. Full feature parity and cutover are **not complete**.
 
 The owner selected an independent Go implementation, replacing every feature in
@@ -16,9 +16,13 @@ scripts, not by the application at runtime.
    stable source IDs, permission-filtered browse/progress reads, and local file
    serving with range/HEAD requests. This stage is additive and does not switch
    the existing web/native players.
-2. **Native playback and progress.** Sessions, multi-file timelines, bookmarks,
-   resume/finish, durable history, retry/offline conflict rules and live handoff.
-   Connect the web/native players and Pocket integration contracts to this engine.
+2. **Native playback and progress (implemented behind `MEDIA_BACKEND=native`).**
+   Durable sessions, multi-file timelines, bookmarks, resume/finish, history,
+   stable report receipts, device handoff, web retry outbox, local FFmpeg/HLS,
+   and Socket.IO v4 WebSocket/polling. The existing web routes and client API
+   dispatch into Go handlers in-process. The compatibility adapter makes no
+   upstream requests. Actual phone-app acceptance and the remaining endpoints
+   in the matrix are still required before cutover.
 3. **Library ingestion and editing.** Scanner/watcher, uploads, file moves,
    metadata/chapters/covers, matching providers, authors/series and bulk actions.
 4. **Remaining feature parity.** Collections/playlists, transcoding and tools,
@@ -47,8 +51,14 @@ permissions (including admin, explicit, tag, locked and unmapped accounts),
 per-person progress, missing files, path/symlink escapes, auth and HTTP ranges.
 The full snapshot rehearsal verifies all five libraries/1,517 visible items and
 exact leading/trailing byte ranges for four audio MIME types while upstream
-network transports are blocked. This is file-serving evidence, not yet proof of
-playback, client compatibility or transcoding.
+network transports are blocked. The rehearsal also opens native playback sessions
+and saves progress for all four formats, and exercises Home, libraries, stats and
+native-client overview routes. Synthetic tests cover web-to-client resume,
+duplicate reports, restart durability, empty close requests, permission isolation,
+WebSocket/polling authentication and revocation. Generated audio tests decode HLS
+segments with FFmpeg, including seeking into a second file. Browser outbox tests
+simulate a server commit followed by a lost response and page reload. These are
+protocol tests, not a claim of testing every third-party phone app.
 
 ## Preserve at migration
 
@@ -83,9 +93,9 @@ as a standalone implementation.
 | Library management | Uploads, metadata/chapter editing, bulk operations, download, safe deletion | Pending |
 | Metadata | Built-in/custom providers, matching, covers, authors, series, genres, tags, narrators | Pending |
 | Browse | Search, filters, sorts, pagination, shelves, series and authors | Pending |
-| Playback | Direct/range streaming, multi-file timeline, transcoding/HLS, seeking | Local range/HEAD serving verified; playback engine pending |
-| Personal state | Progress, bookmarks, completion, hidden items, history, statistics | Import and progress isolation verified; native writes pending |
-| Device sync | Sessions, handoff, retries, offline reports, conflicts, live updates | Pending |
+| Playback | Direct/range streaming, multi-file timeline, transcoding/HLS, seeking | Direct/multi-file playback and local seekable FFmpeg/HLS verified |
+| Personal state | Progress, bookmarks, completion, hidden items, history, statistics | Native writes, retries, resume/finish and isolation verified |
+| Device sync | Sessions, handoff, retries, offline reports, conflicts, live updates | Native engine and web outbox verified; legacy delta-only clients need stable report IDs for exact retry accounting |
 | Clients | Native Pocket app API, third-party login, refresh, token streams, Socket.IO | Pending |
 | Organisation | Collections, personal playlists, bulk add/remove/reorder | Pending |
 | Ebooks | Serving/reading contract, reading progress, companion books, sending to ereaders | Pending |
@@ -184,3 +194,27 @@ at a source Audiobookshelf database; it expects the **imported Pocket catalog**.
 
 Rollback after new listening requires reconciling that new state, not simply
 restoring an old snapshot and discarding it.
+
+## Native playback rehearsal
+
+Set `MEDIA_BACKEND=native` only with a populated staging catalog and correct local
+mounts. `FFMPEG_PATH` and `FFPROBE_PATH` default to binaries on PATH; FFmpeg is now
+included in the container. HLS segments are generated locally on demand with a
+bounded concurrency and deadline. No media files are modified. Source account
+access remains enforced even for a Pocket administrator.
+
+Native web reports include `report_id` and `observed_at` and commit their receipt,
+position, listening time and finish atomically. A duplicate receipt cannot add
+listening time twice. Superseded device sessions can contribute late listening
+history but cannot overwrite the new device's position. The browser persists
+pending reports per Pocket user until acknowledged. Third-party clients that
+only send deltas without stable IDs cannot have exact retry accounting guaranteed.
+
+The backend switch is an implementation/testing option, **not yet a production
+cutover instruction**. Scanning, uploads, metadata administration, several client
+endpoints and the other rows marked pending still require independent services.
+
+```sh
+node scripts/test-playback-outbox.mjs
+go test -race ./...
+```

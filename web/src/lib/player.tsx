@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { api, V1 } from './api'
+import { flushReports, queueReport } from './playback-outbox'
 import { useApp } from './app-context'
 import { useToast } from '../components/ui'
 import { CLIENT_ID, clock, cover, deviceName, markUndecodable, playableTypes } from './books'
@@ -47,10 +48,12 @@ const LAST_KEY = 'pab-last-book'
 const REPORT_EVERY = 15 // seconds, like the Audiobookshelf apps
 const rateKey = (id: string) => `pab-rate-${id}`
 
-interface Loaded { book: Book; session: string; method: 'direct' | 'hls'; tracks: PlayTrack[]; chapters: Chapter[]; duration: number }
+interface Loaded { native: boolean; book: Book; session: string; method: 'direct' | 'hls'; tracks: PlayTrack[]; chapters: Chapter[]; duration: number }
 
 export function PlayerProvider({ children }: { children: React.ReactNode }) {
-  const { settings } = useApp()
+  const { settings, user } = useApp()
+  const owner = useRef(user?.id)
+  owner.current = user?.id
   const { toast } = useToast()
   const audio = useMemo(() => { const a = new Audio(); a.preload = 'auto'; return a }, [])
   const [book, setBook] = useState<Book | null>(null)
@@ -92,6 +95,13 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     lastReport.current = Date.now()
     const t = opts.ended ? c.duration : globalTime()
     try {
+      if (c.native && user) {
+        const body = { report_id: crypto.randomUUID(), observed_at: Date.now(), current_time: t, listened: l, duration: c.duration, playing: !audio.paused, close: !!opts.close, ended: !!opts.ended, item_id: c.book.id, client: CLIENT_ID, device: deviceName() }
+        queueReport(user.id, c.session, body)
+        await flushReports(user.id, () => owner.current === user.id)
+        window.dispatchEvent(new CustomEvent('pab:progress', { detail: { id: c.book.id, time: t, ended: !!opts.ended } }))
+        return
+      }
       const r = await api.post<{ session_id?: string; method?: 'direct' | 'hls'; tracks?: PlayTrack[] }>(`${V1}/sessions/${encodeURIComponent(c.session)}/sync`, {
         current_time: t, listened: l, duration: c.duration, playing: !audio.paused, close: opts.close, ended: opts.ended, item_id: c.book.id, client: CLIENT_ID, device: deviceName(),
       })
@@ -101,8 +111,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         if (r.method === 'hls' || c.method === 'hls') { c.method = r.method || c.method; c.tracks = r.tracks || c.tracks; loadTrackAt(t, !audio.paused) }
       }
       if (cur.current === c) window.dispatchEvent(new CustomEvent('pab:progress', { detail: { id: c.book.id, time: t, ended: !!opts.ended } }))
-    } catch { /* offline: the next report carries the seconds */ listened.current += l }
-  }, [audio, globalTime]) // eslint-disable-line react-hooks/exhaustive-deps
+    } catch { /* offline: the next report carries the seconds */ if (!c.native) listened.current += l }
+  }, [audio, globalTime, user]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---- loading files ----
   const attach = useCallback(async (tr: PlayTrack, at: number, autoplay: boolean) => {
@@ -159,8 +169,9 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     setBook(b)
     applyMediaSession(b)
     try {
+      if (user) await flushReports(user.id, () => owner.current === user.id)
       const info = await api.post<PlayInfo>(`${V1}/play/${encodeURIComponent(b.id)}`, { mime_types: playableTypes(), client: CLIENT_ID, device: deviceName(), force_transcode: !!opts.transcode })
-      const loaded: Loaded = { book: info.book, session: info.session_id, method: info.method, tracks: info.tracks, chapters: info.chapters || [], duration: info.duration }
+      const loaded: Loaded = { native: info.backend === 'native', book: info.book, session: info.session_id, method: info.method, tracks: info.tracks, chapters: info.chapters || [], duration: info.duration }
       cur.current = loaded
       setBook(info.book)
       setChapters(loaded.chapters)
@@ -181,7 +192,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       setLoading(false)
       toast((e as Error).message, 'err')
     }
-  }, [audio, report, applyMediaSession, loadTrackAt, toast]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [audio, report, applyMediaSession, loadTrackAt, toast, user]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const seekTo = useCallback((t: number) => {
     const c = cur.current
@@ -337,7 +348,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       if (c.method === 'direct' && (code === 3 || code === 4)) {
         markUndecodable(c.tracks[trackIdx.current]?.mime || '')
         const at = audio.currentTime > 0 ? globalTime() : wantAt.current
-        toast('This browser can\'t play the file as it is: Audiobookshelf converts it')
+        toast('Converting this file for your browser')
         play(c.book, { at, transcode: true })
         return
       }
@@ -396,7 +407,9 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     const beacon = () => {
       const c = cur.current
       if (!c) return
-      const body = JSON.stringify({ current_time: globalTime(), listened: listened.current, duration: c.duration, playing: false, close: true, item_id: c.book.id, client: CLIENT_ID })
+      const payload = { report_id: crypto.randomUUID(), observed_at: Date.now(), current_time: globalTime(), listened: listened.current, duration: c.duration, playing: false, close: true, item_id: c.book.id, client: CLIENT_ID }
+      if (c.native && user) queueReport(user.id, c.session, payload)
+      const body = JSON.stringify(payload)
       listened.current = 0
       navigator.sendBeacon?.(`${V1}/sessions/${encodeURIComponent(c.session)}/sync`, new Blob([body], { type: 'application/json' }))
     }
@@ -404,7 +417,17 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     window.addEventListener('pagehide', beacon)
     document.addEventListener('visibilitychange', vis)
     return () => { window.removeEventListener('pagehide', beacon); document.removeEventListener('visibilitychange', vis) }
-  }, [report, globalTime])
+  }, [report, globalTime, user])
+
+  useEffect(() => {
+    if (!user) return
+    let active = true
+    const flush = () => { void flushReports(user.id, () => active && owner.current === user.id).catch(() => {}) }
+    flush()
+    const timer = window.setInterval(flush, 15000)
+    window.addEventListener('online', flush)
+    return () => { active = false; clearInterval(timer); window.removeEventListener('online', flush) }
+  }, [user?.id])
 
   // restore the last book (paused) after a reload; the session opens on play
   useEffect(() => {

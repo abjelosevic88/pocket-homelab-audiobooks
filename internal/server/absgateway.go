@@ -233,6 +233,10 @@ func gwSid(r *http.Request) string { return r.URL.Query().Get("sid") }
 
 // handleABSSocket is /socket.io/: a websocket, or HTTP long-polling.
 func (s *Server) handleABSSocket(w http.ResponseWriter, r *http.Request) {
+	if s.cfg.Backend == "native" {
+		s.nativeSocketHTTP(w, r)
+		return
+	}
 	if strings.EqualFold(r.Header.Get("Upgrade"), "websocket") {
 		s.gwWebSocket(w, r, r.URL.Path)
 		return

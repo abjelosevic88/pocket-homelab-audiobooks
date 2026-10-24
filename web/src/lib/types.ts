@@ -44,7 +44,7 @@ export interface DayBook { item_id: string; title: string; author: string; cover
 export interface Day { date: string; seconds: number; books: DayBook[]; finished: { item_id: string; title: string; author: string; cover: string; finished_at: string }[]; sessions: number; summary: string }
 
 export interface PlayTrack { url: string; start: number; duration: number; mime: string }
-export interface PlayInfo { session_id: string; method: 'direct' | 'hls'; tracks: PlayTrack[]; current_time: number; duration: number; chapters: Chapter[]; book: Book; speed: number }
+export interface PlayInfo { backend?: 'native' | 'audiobookshelf'; session_id: string; method: 'direct' | 'hls'; tracks: PlayTrack[]; current_time: number; duration: number; chapters: Chapter[]; book: Book; speed: number }
 export interface NowPlaying {
   active: boolean; playing?: boolean; item_id?: string; title?: string; author?: string; cover?: string; position?: number; duration?: number
   device?: string; app?: string; updated_at?: number; server_time: number

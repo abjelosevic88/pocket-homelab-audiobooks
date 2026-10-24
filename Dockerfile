@@ -23,7 +23,7 @@ RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache
 
 # ---------- 3. runtime ----------
 FROM alpine:3.21
-RUN apk add --no-cache ca-certificates tzdata curl \
+RUN apk add --no-cache ca-certificates tzdata curl ffmpeg \
  && addgroup -g 1000 app && adduser -u 1000 -G app -D -h /data app
 COPY --from=build /out/pocket-audiobooks /usr/local/bin/pocket-audiobooks
 ENV DATA_DIR=/data PORT=8080 HOST=0.0.0.0

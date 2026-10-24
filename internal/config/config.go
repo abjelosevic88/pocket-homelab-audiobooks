@@ -47,6 +47,9 @@ type Config struct {
 
 	// Audiobookshelf. Each person listens with their own account: an API key
 	// or a password sign-in; with Pocket Core the account can come from Core.
+	FFprobe      string
+	FFmpeg       string
+	Backend      string // audiobookshelf | native
 	ABSURL       string
 	ABSPublicURL string // what a browser opens ("Open in Audiobookshelf")
 	// The owner's account, copied once into the owner's own connection: an
@@ -151,6 +154,9 @@ func Load() (*Config, error) {
 		OIDCName:             env("OIDC_NAME", "single sign-on"),
 		OIDCAutoCreate:       envBool("OIDC_AUTO_CREATE", true),
 
+		FFprobe: env("FFPROBE_PATH", "ffprobe"),
+		FFmpeg:       env("FFMPEG_PATH", "ffmpeg"),
+		Backend:      strings.ToLower(env("MEDIA_BACKEND", "audiobookshelf")),
 		ABSURL:       strings.TrimRight(env("AUDIOBOOKSHELF_URL", ""), "/"),
 		ABSPublicURL: strings.TrimRight(env("AUDIOBOOKSHELF_PUBLIC_URL", ""), "/"),
 		ABSToken:     env("AUDIOBOOKSHELF_TOKEN", ""),
@@ -169,6 +175,9 @@ func Load() (*Config, error) {
 	}
 	if c.CoreAppURL == "" {
 		c.CoreAppURL = c.BaseURL
+	}
+	if c.Backend != "native" && c.Backend != "audiobookshelf" {
+		return nil, fmt.Errorf("MEDIA_BACKEND must be native or audiobookshelf")
 	}
 	switch c.AuthMode {
 	case "local", "proxy", "none":
