@@ -323,3 +323,33 @@ func TestLockedAccountAndDenyTags(t *testing.T) {
 		t.Fatalf("tag exclusion: %+v %v", p, err)
 	}
 }
+
+func TestImportExplicitAccountExclusion(t *testing.T) {
+	f := setup(t)
+	sourceExec(t, f, `ALTER TABLE playlists ADD COLUMN userId TEXT; ALTER TABLE playlistMediaItems ADD COLUMN playlistId TEXT;
+ INSERT INTO playlists VALUES('discard-list','public','bob'); INSERT INTO playlistMediaItems VALUES('discard-member','discard-list');
+ INSERT INTO playbackSessions VALUES('history-b','bob','media-visible','{}','{}');
+ UPDATE users SET bookmarks='[{"libraryItemId":"visible","time":12}]' WHERE id='bob';`)
+	f.opt.ExcludeAccounts = []string{"bob"}
+	if _, err := f.catalog.Import(context.Background(), f.opt); err == nil {
+		t.Fatal("mapped exclusion accepted")
+	}
+	assertEmpty(t, f)
+	delete(f.opt.Users, "bob")
+	report := apply(t, f)
+	if report.ExcludedRows["users"] != 1 || report.ExcludedRows["mediaProgresses"] != 1 || report.ExcludedRows["playbackSessions"] != 1 || report.ExcludedRows["playlistMediaItems"] != 1 {
+		t.Fatalf("exclusion report: %+v", report)
+	}
+	for table, want := range map[string]int{"catalog_accounts": 1, "catalog_progress": 1, "catalog_history": 1, "catalog_bookmarks": 0, "catalog_items": 4} {
+		var count int
+		if err := f.catalog.DB.QueryRow("SELECT count(*) FROM " + table).Scan(&count); err != nil || count != want {
+			t.Fatalf("%s count=%d err=%v", table, count, err)
+		}
+	}
+	var lists int
+	f.catalog.DB.QueryRow(`SELECT count(*) FROM catalog_entities WHERE kind IN ('playlists','playlistMediaItems')`).Scan(&lists)
+	if lists != 0 {
+		t.Fatal("excluded private list survived")
+	}
+	sourceExec(t, f, `UPDATE users SET username='Still present in source' WHERE id='bob'`)
+}

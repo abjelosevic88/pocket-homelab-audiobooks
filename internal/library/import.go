@@ -20,16 +20,18 @@ import (
 )
 
 type ImportOptions struct {
-	Source string
-	Mounts map[string]string
-	Users  map[string]int64 // source account ID -> existing Pocket user ID; never guessed
-	Apply  bool
+	Source          string
+	Mounts          map[string]string
+	Users           map[string]int64 // source account ID -> existing Pocket user ID; never guessed
+	ExcludeAccounts []string         // explicitly discarded source accounts; never inferred from missing mappings
+	Apply           bool
 }
 type ImportReport struct {
 	Format           int            `json:"format"`
 	Applied          bool           `json:"applied"`
 	Fingerprint      string         `json:"fingerprint"`
 	Counts           map[string]int `json:"counts"`
+	ExcludedRows     map[string]int `json:"excluded_rows,omitempty"`
 	UnmappedAccounts int            `json:"unmapped_accounts"`
 	FilesAccessible  int            `json:"files_accessible"`
 	MissingFiles     int            `json:"missing_files"`
@@ -266,6 +268,10 @@ func (c *Catalog) Import(ctx context.Context, opt ImportOptions) (ImportReport, 
 	}
 	fingerprint := sha256.Sum256([]byte(raw(data)))
 	report.Fingerprint = hex.EncodeToString(fingerprint[:])
+	report.ExcludedRows, err = excludeSourceAccounts(data, opt)
+	if err != nil {
+		return report, err
+	}
 	pending := []statement{}
 	add := func(table, columns, marks string, args ...any) {
 		pending = append(pending, statement{`INSERT INTO ` + table + ` (` + columns + `) VALUES (` + marks + `)`, args})
@@ -606,4 +612,48 @@ func ReadJSONFile(path string, out any) error {
 		return errors.New("configuration must contain exactly one JSON value")
 	}
 	return nil
+}
+
+// Exclusions affect only the new import, never the read-only source snapshot.
+func excludeSourceAccounts(data map[string][]sourceRow, opt ImportOptions) (map[string]int, error) {
+	excluded := map[string]bool{}
+	known := map[string]bool{}
+	for _, u := range data["users"] {
+		known[str(u["id"])] = true
+	}
+	for _, id := range opt.ExcludeAccounts {
+		if !known[id] {
+			return nil, fmt.Errorf("excluded account %q does not exist", id)
+		}
+		if _, mapped := opt.Users[id]; mapped {
+			return nil, fmt.Errorf("account %q is both mapped and excluded", id)
+		}
+		excluded[id] = true
+	}
+	counts := map[string]int{}
+	filter := func(table, key string, ids map[string]bool) {
+		kept := []sourceRow{}
+		for _, row := range data[table] {
+			if ids[str(row[key])] {
+				counts[table]++
+			} else {
+				kept = append(kept, row)
+			}
+		}
+		data[table] = kept
+	}
+	for _, pair := range [][3]string{{"playlists", "playlistMediaItems", "playlistId"}, {"collections", "collectionBooks", "collectionId"}} {
+		owned := map[string]bool{}
+		for _, row := range data[pair[0]] {
+			if excluded[str(row["userId"])] {
+				owned[str(row["id"])] = true
+			}
+		}
+		filter(pair[1], pair[2], owned)
+		filter(pair[0], "id", owned)
+	}
+	filter("users", "id", excluded) // bookmarks are embedded in each source user.
+	filter("mediaProgresses", "userId", excluded)
+	filter("playbackSessions", "userId", excluded)
+	return counts, nil
 }

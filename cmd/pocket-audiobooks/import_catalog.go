@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/abjelosevic88/pocket-homelab-audiobooks/internal/library"
 )
@@ -15,6 +16,7 @@ func runCatalogImport(args []string) {
 	source := flags.String("source", "", "consistent Audiobookshelf SQLite snapshot (opened read-only)")
 	mounts := flags.String("mounts", "", "JSON map of source container roots to local media roots")
 	users := flags.String("users", "", "JSON map of source account IDs to existing Pocket user IDs")
+	exclude := flags.String("exclude-accounts", "", "comma-separated source account IDs to discard, including personal state and owned lists")
 	apply := flags.Bool("apply", false, "commit validated import; default validates then rolls back")
 	_ = flags.Parse(args)
 	if *source == "" || *mounts == "" || *users == "" || flags.NArg() != 0 {
@@ -22,6 +24,11 @@ func runCatalogImport(args []string) {
 		os.Exit(2)
 	}
 	opt := library.ImportOptions{Source: *source, Apply: *apply}
+	if *exclude != "" {
+		for _, id := range strings.Split(*exclude, ",") {
+			opt.ExcludeAccounts = append(opt.ExcludeAccounts, strings.TrimSpace(id))
+		}
+	}
 	if err := library.ReadJSONFile(*mounts, &opt.Mounts); err != nil {
 		fmt.Fprintln(os.Stderr, "read mount map:", err)
 		os.Exit(1)

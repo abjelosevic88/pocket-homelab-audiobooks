@@ -42,8 +42,9 @@ The first rehearsal imported a private snapshot into a separate staging database
 1,506 books, 11 podcasts, 77 episodes, five libraries, 151 authors, 226 series,
 11 progress records and 92 listening sessions. The native catalog holds all three
 source accounts; only the one identity proven by Pocket's existing sync mapping
-was bound to a Pocket account. Two accounts remain unmapped and cannot access the
-catalog until explicitly linked. No source passwords, tokens or email addresses
+was bound to a Pocket account. The owner subsequently requested that only `root` migrate. The final import will
+explicitly exclude `fika` and `raycast`, including their personal state and owned lists;
+the rehearsal snapshot still contains the original accounts. No source passwords, tokens or email addresses
 were loaded into the catalog accounts table.
 
 There are 15,656 indexed file records, including cover/episode records beyond the
@@ -142,7 +143,11 @@ python3 -m unittest discover -s scripts/migration -v
 Build the existing app normally. Start with a **separate copy** of its SQLite
 snapshot so it contains the intended Pocket user IDs. Create a private `users.json`
 map of source account IDs to existing Pocket user IDs, for example
-`{"source-account-id": 1}`. Omitted accounts are preserved but unbound; mappings
+`{"source-account-id": 1}`. By default, omitted accounts are preserved but unbound. Use
+`--exclude-accounts source-id,source-id` only for explicitly discarded accounts;
+this also excludes their progress, history, bookmarks and owned lists, records
+excluded row counts, and rejects IDs that are unknown or also mapped. Source
+snapshots and shared media remain untouched. Mappings
 are never guessed from usernames, email addresses or admin roles. Create a
 `mounts.json` map, for example `{"/audiobooks": "/srv/books", "/metadata":
 "/srv/metadata"}`. Every indexed path must have a mapping. The folders must exist;
