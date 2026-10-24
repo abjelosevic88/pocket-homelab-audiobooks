@@ -1,0 +1,7 @@
+# Pocket Audiobooks behind Caddy. Audio streams and HLS segments are long requests:
+# no timeouts and no buffering here.
+audio.example.com {
+	reverse_proxy pocket-audiobooks:8080 {
+		flush_interval -1
+	}
+}

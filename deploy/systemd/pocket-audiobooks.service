@@ -1,0 +1,24 @@
+[Unit]
+Description=Pocket Audiobooks — audiobooks for the household, on top of Audiobookshelf
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=pocket-audiobooks
+Group=pocket-audiobooks
+ExecStart=/usr/local/bin/pocket-audiobooks
+Environment=DATA_DIR=/var/lib/pocket-audiobooks
+Environment=PORT=8080
+Environment=BASE_URL=https://audio.example.com
+Environment=AUDIOBOOKSHELF_URL=http://127.0.0.1:13378
+Environment=SECURE_COOKIES=true
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/pocket-audiobooks
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,23 @@
+# author|series|sequence|title|hours|chapters|year   (public-domain books; the audio is generated, see README.md)
+Arthur Conan Doyle|Sherlock Holmes|1|A Study in Scarlet|4.6|14|1887
+Arthur Conan Doyle|Sherlock Holmes|2|The Sign of the Four|4.3|12|1890
+Arthur Conan Doyle|Sherlock Holmes|3|The Adventures of Sherlock Holmes|10.4|files|1892
+Arthur Conan Doyle|Sherlock Holmes|5|The Hound of the Baskervilles|6.2|15|1902
+Jane Austen|||Pride and Prejudice|11.6|61|1813
+Mary Shelley|||Frankenstein|8.6|28|1818
+Bram Stoker|||Dracula|15.4|27|1897
+H. G. Wells|||The Time Machine|3.4|16|1895
+H. G. Wells|||The War of the Worlds|6.4|27|1898
+H. G. Wells|||The Invisible Man|5.5|28|1897
+Jules Verne|Extraordinary Voyages|3|Journey to the Center of the Earth|8.1|45|1864
+Jules Verne|Extraordinary Voyages|6|Twenty Thousand Leagues Under the Seas|12.3|47|1870
+Jules Verne|Extraordinary Voyages|11|Around the World in Eighty Days|6.9|37|1872
+L. Frank Baum|Oz|1|The Wonderful Wizard of Oz|4.0|24|1900
+L. Frank Baum|Oz|2|The Marvelous Land of Oz|5.2|24|1904
+L. Frank Baum|Oz|3|Ozma of Oz|4.4|21|1907
+Robert Louis Stevenson|||Treasure Island|7.2|34|1883
+Lewis Carroll|||Alice's Adventures in Wonderland|2.9|12|1865
+Oscar Wilde|||The Picture of Dorian Gray|8.4|20|1890
+Herman Melville|||Moby-Dick|24.8|135|1851
+Louisa May Alcott|||Little Women|19.5|47|1868
+Kenneth Grahame|||The Wind in the Willows|5.8|12|1908
