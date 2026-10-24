@@ -110,12 +110,44 @@ func (s *Store) migrate() error {
 
 // Backup writes a consistent copy of the database to dst using VACUUM INTO.
 func (s *Store) Backup(ctx context.Context, dst string) error {
-	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(dst), 0700); err != nil {
 		return err
 	}
-	_ = os.Remove(dst)
-	_, err := s.DB.ExecContext(ctx, `VACUUM INTO ?`, dst)
-	return err
+	stage, err := os.MkdirTemp(filepath.Dir(dst), ".sqlite-backup-")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(stage)
+	name := filepath.Join(stage, "snapshot.db")
+	if _, err = s.DB.ExecContext(ctx, `VACUUM INTO ?`, name); err != nil {
+		return err
+	}
+	if err = os.Chmod(name, 0600); err != nil {
+		return err
+	}
+	f, err := os.Open(name)
+	if err != nil {
+		return err
+	}
+	err = f.Sync()
+	closeErr := f.Close()
+	if err != nil {
+		return err
+	}
+	if closeErr != nil {
+		return closeErr
+	}
+	// Publishing a completed snapshot never overwrites a previous backup or the
+	// live database, including when concurrent callers choose the same name.
+	if err = os.Link(name, dst); err != nil {
+		return err
+	}
+	parent, err := os.Open(filepath.Dir(dst))
+	if err != nil {
+		return err
+	}
+	defer parent.Close()
+	return parent.Sync()
 }
 
 // Tables lists the tables counted for metrics / the About page.
@@ -219,4 +251,32 @@ func (s *Store) CachePut(ctx context.Context, key, value string) error {
 func (s *Store) CacheDelete(ctx context.Context, prefix string) error {
 	_, err := s.DB.ExecContext(ctx, `DELETE FROM cache WHERE key LIKE ? || '%'`, prefix)
 	return err
+}
+
+// CheckCompatibleSchema refuses future/foreign migrations before restoring a
+// database with this binary. It performs no migrations or writes.
+func CheckCompatibleSchema(ctx context.Context, db *sql.DB) error {
+	rows, err := db.QueryContext(ctx, `SELECT name FROM schema_migrations`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	count := 0
+	for rows.Next() {
+		var name string
+		if err = rows.Scan(&name); err != nil {
+			return err
+		}
+		if strings.ContainsAny(name, "/\\") {
+			return errors.New("invalid database migration")
+		}
+		if _, err = fs.Stat(migrationFS, "migrations/"+name); err != nil {
+			return fmt.Errorf("backup needs a different/newer application version: %s", name)
+		}
+		count++
+	}
+	if count == 0 {
+		return errors.New("not a Pocket Audiobooks database")
+	}
+	return rows.Err()
 }

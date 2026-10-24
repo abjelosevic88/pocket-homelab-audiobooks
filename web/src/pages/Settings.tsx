@@ -72,7 +72,7 @@ export default function Settings() {
             {tab === 'profile' && <Profile />}
             {tab === 'people' && <Users />}
             {tab === 'tokens' && <Tokens />}
-            {tab === 'data' && <Data />}
+            {tab === 'data' && <Data native={native} />}
             {tab === 'about' && <About />}
           </div>
         </main>
@@ -400,7 +400,7 @@ function Tokens() {
   )
 }
 
-function Data() {
+function Data({native}: {native: boolean}) {
   const { toast } = useToast()
   const { user } = useApp()
   const [busy, setBusy] = useState(false)
@@ -410,9 +410,11 @@ function Data() {
   }
   return (
     <div className="stack loose">
-      {user?.role === 'admin' && <Section title="Database backup" icon="database" sub="The whole box, every account — admins only.">
-        <p className="muted">A consistent copy of the SQLite database (<code>VACUUM INTO</code>): listening history, finished books, Up next and settings. The books, places and bookmarks live in Audiobookshelf. Restore by stopping the app and replacing <code>pocket-audiobooks.db</code>.</p>
-        <a className="btn primary" href={`${V1}/backup`}><Icon name="download" size={15} />Download database</a>
+      {user?.role === 'admin' && <Section title="Application backup" icon="database" sub="All accounts — admins only.">
+        <p className="muted">Save the database, encryption key, Core connection and managed artwork together. The bundle includes checksums and can be restored into a new installation.</p>
+        <p className="muted">{native ? 'Your places, bookmarks, library metadata and reading history are in this database. Audio, ebooks, imported artwork and Trash in external library folders need their own media backup.' : 'Books, places and bookmarks are still held by Audiobookshelf; back up that server too.'}</p>
+        <div className="row wrap"><a className="btn primary" href={`${V1}/backup?format=bundle`}><Icon name="download" size={15} />Download application backup</a><a className="btn" href={`${V1}/backup`}>Database only</a></div>
+        <p className="small muted">Application backups contain credentials. Keep them private. Restore with the server command into a new data directory.</p>
       </Section>}
       <Section title="Your history" icon="archive" sub="Everything you listened to, finished books and Up next as JSON, to keep or to move to another box.">
         <div className="row wrap">

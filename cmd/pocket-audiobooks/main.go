@@ -21,6 +21,7 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
+	"github.com/abjelosevic88/pocket-homelab-audiobooks/internal/backup"
 	"github.com/abjelosevic88/pocket-homelab-audiobooks/internal/config"
 	"github.com/abjelosevic88/pocket-homelab-audiobooks/internal/server"
 	"github.com/abjelosevic88/pocket-homelab-audiobooks/internal/store"
@@ -41,6 +42,9 @@ func main() {
 		case "backup":
 			runBackup(os.Args[2:])
 			return
+		case "restore", "verify-backup":
+			runBundleRestore(os.Args[1], os.Args[2:])
+			return
 		case "reset-password":
 			runResetPassword(os.Args[2:])
 			return
@@ -49,7 +53,10 @@ func main() {
 
 Usage:
   pocket-audiobooks                     start the server (default)
-  pocket-audiobooks backup [-o FILE]    write a consistent SQLite backup
+  pocket-audiobooks backup [--bundle] [-o FILE]   write a SQLite snapshot or application bundle
+  pocket-audiobooks verify-backup --from BUNDLE  validate an application bundle
+  pocket-audiobooks restore --from BUNDLE --to NEW_DIR
+                                   restore into a new directory; existing data is never overwritten
   pocket-audiobooks reset-password [-email USER] [-password NEW]
                                    set a user's password (default: first user, random password printed)
   pocket-audiobooks import-audiobookshelf --source SNAPSHOT --mounts MAP --users MAP [--apply]
@@ -99,7 +106,8 @@ func mustLoad() (*config.Config, *slog.Logger, *store.Store) {
 
 func serve() {
 	server.Version = version
-	cfg, log, st := mustLoad()
+	cfg, log, st, lease := mustLoadExclusive()
+	defer lease.Close()
 	defer st.Close()
 
 	var webFS fs.FS
@@ -142,18 +150,59 @@ func serve() {
 	_ = httpSrv.Shutdown(shutdownCtx)
 }
 
-func runBackup(args []string) {
-	fs := flag.NewFlagSet("backup", flag.ExitOnError)
-	out := fs.String("o", "", "output file (default: DATA_DIR/backups/pocket-audiobooks-<timestamp>.db)")
-	_ = fs.Parse(args)
-	cfg, log, st := mustLoad()
-	defer st.Close()
-	dst := *out
-	if dst == "" {
-		_ = os.MkdirAll(cfg.DataDir+"/backups", 0o755)
-		dst = fmt.Sprintf("%s/backups/pocket-audiobooks-%s.db", cfg.DataDir, time.Now().Format("20060102-150405"))
+// The server and offline bundle command hold the same process lease. Online
+// bundles use the authenticated API and its in-process stable-files guard.
+func mustLoadExclusive() (*config.Config, *slog.Logger, *store.Store, *os.File) {
+	cfg, err := config.Load()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
 	}
-	if err := st.Backup(context.Background(), dst); err != nil {
+	log := newLogger(cfg)
+	lease, err := backup.Exclusive(cfg.DataDir)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	st, err := store.Open(cfg.DBPath, log)
+	if err != nil {
+		lease.Close()
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	return cfg, log, st, lease
+}
+func runBackup(args []string) {
+	flags := flag.NewFlagSet("backup", flag.ExitOnError)
+	output := flags.String("o", "", "output file (default: timestamped DATA_DIR/backups entry)")
+	bundle := flags.Bool("bundle", false, "include database, credentials and managed artwork; stop the server first or use the web download")
+	_ = flags.Parse(args)
+	var cfg *config.Config
+	var log *slog.Logger
+	var st *store.Store
+	if *bundle {
+		var lease *os.File
+		cfg, log, st, lease = mustLoadExclusive()
+		defer lease.Close()
+	} else {
+		cfg, log, st = mustLoad()
+	}
+	defer st.Close()
+	dst := *output
+	if dst == "" {
+		ext := ".db"
+		if *bundle {
+			ext = ".tar.gz"
+		}
+		dst = fmt.Sprintf("%s/backups/pocket-audiobooks-%s%s", cfg.DataDir, time.Now().UTC().Format("20060102T150405.000000000Z"), ext)
+	}
+	var err error
+	if *bundle {
+		_, err = backup.Create(context.Background(), st, backup.Options{DataDir: cfg.DataDir, Destination: dst, Backend: cfg.Backend, Version: version})
+	} else {
+		err = st.Backup(context.Background(), dst)
+	}
+	if err != nil {
 		log.Error("backup failed", "err", err)
 		os.Exit(1)
 	}

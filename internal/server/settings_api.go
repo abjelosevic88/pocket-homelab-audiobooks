@@ -2,7 +2,8 @@ package server
 
 import (
 	"context"
-	"fmt"
+	"github.com/abjelosevic88/pocket-homelab-audiobooks/internal/backup"
+	"github.com/abjelosevic88/pocket-homelab-audiobooks/internal/library"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -190,14 +191,33 @@ func (s *Server) handleBackup(w http.ResponseWriter, r *http.Request) {
 	if !s.requireAdmin(w, r) {
 		return
 	}
+	format := r.URL.Query().Get("format")
+	if format != "" && format != "bundle" {
+		writeErr(w, 400, "unknown backup format")
+		return
+	}
 	dir := filepath.Join(s.cfg.DataDir, "backups")
-	name := fmt.Sprintf("pocket-audiobooks-%s.db", time.Now().Format("20060102-150405"))
+	ext, mime := ".db", "application/vnd.sqlite3"
+	if format == "bundle" {
+		ext, mime = ".tar.gz", "application/gzip"
+	}
+	name := "pocket-audiobooks-" + time.Now().UTC().Format("20060102T150405.000000000Z") + ext
 	dst := filepath.Join(dir, name)
-	if err := s.store.Backup(r.Context(), dst); err != nil {
+	var err error
+	if format == "bundle" {
+		err = library.WithStableFiles(func() error {
+			_, e := backup.Create(r.Context(), s.store, backup.Options{DataDir: s.cfg.DataDir, Destination: dst, Backend: s.cfg.Backend, Version: Version})
+			return e
+		})
+	} else {
+		err = s.store.Backup(r.Context(), dst)
+	}
+	if err != nil {
 		s.fail(w, err, "backup")
 		return
 	}
-	w.Header().Set("Content-Type", "application/vnd.sqlite3")
+	w.Header().Set("Cache-Control", "private, no-store")
+	w.Header().Set("Content-Type", mime)
 	w.Header().Set("Content-Disposition", `attachment; filename="`+name+`"`)
 	http.ServeFile(w, r, dst)
 }

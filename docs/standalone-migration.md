@@ -119,7 +119,7 @@ as a standalone implementation.
 | Sharing | RSS for books/series/collections, media shares, passwords/expiry/download permissions | Native RSS and share pages for books, series, collections and podcast episodes; password grants, expiry/revocation, current publisher permissions, per-episode media boundaries, original downloads and HLS fallback implemented. Browser create/play/resume/RSS/revoke and protocol isolation tests pass; source snapshot has no published feeds |
 | Accounts | Local/SSO authentication, per-user isolation, permissions, API-key lifecycle | Admin mapping/grants, library/tag/explicit permissions, locking, stale-update rejection and account ownership verified; full migration pending |
 | Tools | Metadata embedding, M4B conversion, jobs, cancellation, status | Pending |
-| Operations | Backups/restore, logging, cache management, settings and notifications | Pending |
+| Operations | Backups/restore, logging, cache management, settings and notifications | Checksummed application bundles, safe verification/restore into a new directory, managed-art/credential recovery and database snapshots implemented; external media snapshots remain separate. Other operations parity pending |
 | Pocket integrations | Core pairing, Day, Bookshelf, Homepage, notifications and backup plans | Existing interfaces; standalone verification pending |
 
 Use the installed server's router/controllers and native app service client as
@@ -416,3 +416,19 @@ to compare each native subscription against the source metadata. Calendar tests
 cover weekday/month-day intersections, Sunday aliases, optional seconds and both
 Sarajevo daylight-saving transitions. Worker tests cover outages, retries, disabled
 jobs and a restart after fetching a feed but before queuing its episodes.
+
+## Application recovery bundles
+
+Native bundles preserve database state, encryption key, Core credentials and
+referenced managed artwork, including recoverable Trash. Existing database-only
+backup jobs continue to work, but no backup can overwrite an existing destination.
+The live admin download coordinates with Trash; the offline CLI holds an exclusive
+application lease. Restore validates checksums, archive paths/types, SQLite
+integrity/references and schema before publishing a new private directory.
+
+Round-trip tests verify saved positions, existing app tokens, sealed secrets,
+managed covers and Trash restoration after file identities change. Corruption,
+traversal, links, duplicate/absent files, truncated gzip and concurrent instance
+leases are tested. External media roots are listed explicitly, not represented as
+included audio backups. See [backup and restore](backup.md) for recovery and media
+snapshot requirements. No live deployment or source media was changed by these tests.

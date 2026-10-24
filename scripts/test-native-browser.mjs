@@ -200,6 +200,12 @@ try {
   await page.getByLabel('Replace current chapters with one chapter per included file',{exact:true}).check()
   await page.getByRole('button',{name:'Save track order',exact:true}).click()
   await page.getByRole('dialog',{name:'Manage tracks',exact:true}).waitFor({state:'hidden'})
+  await page.goto(process.env.BASE+'/settings/data')
+  const downloaded=page.waitForEvent('download')
+  await page.getByRole('link',{name:'Download application backup',exact:true}).click()
+  const bundle=await downloaded
+  assert.ok(bundle.suggestedFilename().endsWith('.tar.gz'))
+  assert.equal(await bundle.failure(),null)
   assert.deepEqual(errors, [])
-  console.log('Native browser acceptance passed: play, pause/save, metadata search/edit, scan, upload, browse, account access, collections, podcast subscription/download/play/resume, EPUB reading/resume/chapters, companion PDF paging/resume, public sharing/RSS/play/resume/revoke, trash/restore, episode editing, library archive/restore, bulk metadata edits/export and track settings.')
+  console.log('Native browser acceptance passed: play, pause/save, metadata search/edit, scan, upload, browse, account access, collections, podcast subscription/download/play/resume, EPUB reading/resume/chapters, companion PDF paging/resume, public sharing/RSS/play/resume/revoke, trash/restore, episode editing, library archive/restore, bulk metadata edits/export track settings and application backup download.')
 } finally { await context.close(); await browser.close() }
