@@ -26,3 +26,9 @@
 .match-result .grow { min-width: 0; }
 .match-result a { color: var(--text); }
 .match-options { display: grid; gap: 4px; }
+
+/* Author profiles */
+.author-edit-photo { width: 96px; height: 96px; flex: 0 0 96px; border-radius: 50%; overflow: hidden; background: var(--surface-3); display: grid; place-items: center; text-align: center; }
+.author-edit-photo img { width: 100%; height: 100%; object-fit: cover; }
+.author-meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 6px; }
+.author-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }

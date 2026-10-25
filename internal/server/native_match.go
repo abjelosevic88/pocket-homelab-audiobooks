@@ -517,7 +517,7 @@ func (s *Server) nativeMatchJobs(w http.ResponseWriter, r *http.Request) {
 	}
 	if r.Method == "GET" {
 		lib := r.URL.Query().Get("library")
-		rows, err := s.store.DB.QueryContext(ctx, `SELECT id FROM catalog_match_jobs WHERE user_id=? AND (?='' OR library_id=?) ORDER BY created_at DESC LIMIT 10`, uid, lib, lib)
+		rows, err := s.store.DB.QueryContext(ctx, `SELECT id FROM catalog_match_jobs WHERE user_id=? AND provider<>? AND (?='' OR library_id=?) ORDER BY created_at DESC LIMIT 10`, uid, authorJobProvider, lib, lib)
 		if err != nil {
 			s.nativeError(w, err)
 			return

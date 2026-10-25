@@ -1,6 +1,7 @@
 // The library: books (sorted, filtered, loading more as you scroll), series and authors, one library at a time.
 import {BulkBookEditor} from '../components/BulkBookEditor'
 import {QuickMatchDialog} from '../components/QuickMatchDialog'
+import { AuthorMatchAllDialog } from '../components/AuthorDialogs'
 import {useApp} from '../lib/app-context'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { NavLink, useSearchParams } from 'react-router-dom'
@@ -164,7 +165,9 @@ function Series({ lib }: { lib: string }) {
 }
 
 function Authors({ lib }: { lib: string }) {
-  const { data, notConnected, error } = useApi<{ items: AuthorCard[] }>(`${V1}/authors?library=${encodeURIComponent(lib)}`)
+  const { settings } = useApp()
+  const { data, notConnected, error, reload } = useApi<{ items: AuthorCard[] }>(`${V1}/authors?library=${encodeURIComponent(lib)}`)
+  const [matching, setMatching] = useState(false)
   const [q, setQ] = useState('')
   const dq = useDebounce(q, 150)
   const shown = useMemo(() => (data?.items || []).filter(a => !dq.trim() || a.name.toLowerCase().includes(dq.trim().toLowerCase())), [data, dq])
@@ -175,10 +178,12 @@ function Authors({ lib }: { lib: string }) {
     <>
       <div className="toolbar row wrap">
         <div className="search-box"><Icon name="search" size={15} /><input value={q} onChange={e => setQ(e.target.value)} placeholder="Find an author" aria-label="Find an author" /></div>
+        {settings?.backend === 'native' && <button className="btn" onClick={() => setMatching(true)}><Icon name="wand" size={15} />Match all authors</button>}
         <span className="spacer" />
         <span className="muted small">{data.items.length.toLocaleString()} authors</span>
       </div>
       {shown.length === 0 ? <Empty title="No authors" icon="feather" /> : <div className="grid-people">{shown.map(a => <AuthorTile key={a.id} a={a} />)}</div>}
+      {matching && <AuthorMatchAllDialog library={lib} onClose={() => setMatching(false)} onDone={() => void reload()} />}
     </>
   )
 }
