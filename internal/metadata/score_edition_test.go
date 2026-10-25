@@ -12,9 +12,15 @@ func TestScoreKeepsDramatizationsAndReadingsApart(t *testing.T) {
 	if s := ScoreCandidate(ga, drama); !s.Confident {
 		t.Fatalf("dramatized edition not confident: %+v", s)
 	}
-	plain := MatchQuery{Title: "Choice of the Cat", Authors: []string{"E.E. Knight"}, Duration: 11.4 * 3600}
+	plain := MatchQuery{Title: "Choice of the Cat", Authors: []string{"E.E. Knight"}, Duration: 11.4 * 3600, Narrators: []string{"Christian Rummel"}}
 	if s := ScoreCandidate(plain, drama); s.Confident {
 		t.Fatalf("reading matched a dramatization: %+v", s)
+	}
+	unknown := MatchQuery{Title: "Sea Hag", Authors: []string{"Dan Shamble"}, Duration: 6.7 * 3600}
+	same := Candidate{Title: "Sea Hag [Dramatized Adaptation]", Authors: []string{"Dan Shamble"}, Duration: 6.7*3600 + 60}
+	other := Candidate{Title: "Sea Hag [Dramatized Adaptation]", Authors: []string{"Dan Shamble"}, Duration: 6.2 * 3600}
+	if !ScoreCandidate(unknown, same).Confident || ScoreCandidate(unknown, other).Confident {
+		t.Fatal("unknown edition should match only a near-identical runtime")
 	}
 }
 

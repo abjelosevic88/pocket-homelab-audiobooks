@@ -292,6 +292,11 @@ func ScoreCandidate(q MatchQuery, c Candidate) Score {
 	// A GraphicAudio dramatization and the single-narrator reading share a
 	// title and author; never quick-match one to the other.
 	s.Edition = q.dramatized() == candidateDramatized(c)
+	// A book with no narrator or publisher has an unknown edition; a runtime
+	// within 2% is then strong evidence it is that same production.
+	if !s.Edition && len(q.Narrators) == 0 && q.Publisher == "" && !dramatized(q.Title, q.Subtitle) && ratio >= 0 && ratio <= 0.02 {
+		s.Edition = true
+	}
 	switch {
 	case s.Exact:
 		s.Total, s.Confident = 1, s.Edition && ratio <= MaxExactDurationRatio
