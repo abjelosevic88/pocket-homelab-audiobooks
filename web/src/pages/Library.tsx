@@ -1,6 +1,7 @@
 // The library: books (sorted, filtered, loading more as you scroll), series and authors, one library at a time.
 import {BulkBookEditor} from '../components/BulkBookEditor'
 import {QuickMatchDialog} from '../components/QuickMatchDialog'
+import { ReviewMatchesButton } from '../components/ReviewMatchesButton'
 import { AuthorMatchAllDialog } from '../components/AuthorDialogs'
 import {useApp} from '../lib/app-context'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -131,6 +132,7 @@ function Books({ lib }: { lib: string }) {
         {settings?.backend==='native'&&<button className="btn" onClick={()=>{setSelecting(!selecting);setSelected([])}}>{selecting?'Cancel selection':'Select books'}</button>}
         {selecting&&<><button className="btn" onClick={()=>setSelected(items.slice(0,100).map(b=>b.id))}>Select visible books</button><button className="btn primary" disabled={!selected.length} onClick={()=>setEditing(true)}>Edit selected ({selected.length})</button></>}
         {settings?.backend==='native'&&<button className="btn" disabled={selecting&&!selected.length} onClick={()=>setMatching(selecting?selected:[])}>{selecting?`Quick match selected (${selected.length})`:'Quick match'}</button>}
+        {settings?.backend==='native'&&!selecting&&<ReviewMatchesButton library={lib} revision={revision}/>}
         <span className="spacer" />
         <span className="muted small">{total >= 0 ? `${total.toLocaleString()} ${total === 1 ? 'book' : 'books'}` : ''}</span>
         <Select ariaLabel="Sort" value={sort} onChange={v => set('sort', v)} options={SORTS} />

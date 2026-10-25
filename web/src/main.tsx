@@ -26,6 +26,7 @@ import Trash from './pages/Trash'
 import Settings from './pages/Settings'
 
 const Reader = lazy(() => import('./pages/Reader'))
+const MatchReview = lazy(() => import('./pages/MatchReview'))
 
 function Gate({ children }: { children: React.ReactNode }) {
   const { status, user } = useApp()
@@ -70,6 +71,7 @@ function App() {
           <Route path="/shares" element={<Shares />} />
           <Route path="/trash" element={<Trash />} />
           <Route path="/lists" element={<Lists />} />
+          <Route path="/review/:job?" element={<Suspense fallback={<Loading />}><MatchReview /></Suspense>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Route>

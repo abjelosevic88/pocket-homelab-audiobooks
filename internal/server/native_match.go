@@ -37,6 +37,7 @@ func (s *Server) nativeMatchRoutes(r chi.Router) {
 	r.Post("/catalog/match-jobs", s.nativeMatchJobs)
 	r.Get("/catalog/match-jobs/{job}", s.nativeMatchJob)
 	r.Delete("/catalog/match-jobs/{job}", s.nativeMatchJob)
+	s.nativeMatchReviewRoutes(r)
 }
 
 // matchRuns holds the cancel functions of bulk jobs running in this process.
@@ -207,7 +208,8 @@ func (s *Server) nativeMatchSearch(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 400, err.Error())
 		return
 	}
-	out := nativeObject{"item": nativeObject{"id": it.ID, "title": it.Title, "author": it.Author, "duration": it.Duration, "expected_updated_at": it.UpdatedAt, "has_cover": hasCover, "metadata": cur}, "query": nativeObject{"title": title, "author": author}, "candidates": []metadata.Ranked{}, "errors": []string{}}
+	detail, _ := strconv.Atoi(r.URL.Query().Get("detail"))
+	out := nativeObject{"item": nativeObject{"id": it.ID, "title": it.Title, "author": it.Author, "duration": it.Duration, "expected_updated_at": it.UpdatedAt, "has_cover": hasCover, "metadata": cur, "path": itemFolder(it), "dramatized": q.Dramatized()}, "query": nativeObject{"title": title, "author": author}, "candidates": []reviewCandidate{}, "errors": []string{}}
 	errs := []string{}
 	for _, p := range providers {
 		ranked, err := s.matchCandidates(ctx, p, q, title, author)
@@ -220,7 +222,7 @@ func (s *Server) nativeMatchSearch(w http.ResponseWriter, r *http.Request) {
 		}
 		if len(ranked) > 0 {
 			out["provider"] = p.ID
-			out["candidates"] = ranked
+			out["candidates"] = s.detailCandidates(ctx, p, q, ranked, detail)
 			break
 		}
 	}

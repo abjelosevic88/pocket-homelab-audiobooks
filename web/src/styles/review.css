@@ -1,0 +1,42 @@
+/* Review matches: the book on the left, candidates on the right; stacked on narrow screens. */
+.review-page { display: flex; flex-direction: column; gap: 14px; padding-bottom: 72px; }
+.review-bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.review-progress { display: flex; flex-direction: column; gap: 6px; }
+.review-nav .review-pos { text-align: center; }
+.review-grid { display: grid; grid-template-columns: minmax(240px, 340px) minmax(0, 1fr); gap: 16px; align-items: start; }
+.review-book { position: sticky; top: calc(var(--topbar-h) + 12px); display: flex; flex-direction: column; gap: 12px; padding: 14px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); }
+.review-cover { width: 100%; max-width: 260px; aspect-ratio: 1; object-fit: cover; border-radius: var(--radius); background: var(--surface-3); align-self: center; }
+.review-book-body { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.review-book h2 { margin: 0; font-size: 18px; line-height: 1.3; overflow-wrap: anywhere; }
+.review-book h2 a { color: var(--text); }
+.review-facts { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 12px; margin: 0; font-size: 13px; }
+.review-facts dt { color: var(--muted); }
+.review-facts dd { margin: 0; color: var(--text-2); overflow-wrap: anywhere; }
+.review-path { font-family: var(--mono); font-size: 12px; }
+.review-cands { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.review-search { display: grid; grid-template-columns: 1.4fr 1fr minmax(110px, 150px) auto; gap: 8px; align-items: end; }
+.review-list { display: flex; flex-direction: column; gap: 8px; }
+.review-cand { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); overflow: hidden; }
+.review-cand.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent-ring); }
+.review-cand-head { display: flex; gap: 12px; align-items: flex-start; width: 100%; padding: 10px; border: 0; background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.review-cand-head:hover { background: var(--hover); }
+.review-cand-head:focus-visible { outline: 2px solid var(--accent-ring); outline-offset: -2px; }
+.review-score { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; margin-top: 4px; font-size: 12px; color: var(--muted); }
+.review-score .good { color: var(--green-ink); }
+.review-score .bad { color: var(--danger); font-weight: 600; }
+.review-diff { padding: 0 10px 10px; display: flex; flex-direction: column; gap: 8px; overflow-x: auto; }
+.review-actions { position: sticky; bottom: 0; z-index: 2; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px 0; background: var(--bg); border-top: 1px solid var(--hairline); }
+.review-keys kbd { margin: 0 1px; }
+@media (max-width: 899px) {
+  .review-grid { grid-template-columns: 1fr; }
+  .review-book { position: static; flex-direction: row; align-items: flex-start; }
+  .review-cover { width: 96px; max-width: 96px; flex: 0 0 96px; }
+}
+@media (max-width: 599px) {
+  .review-search { grid-template-columns: 1fr 1fr; }
+  .review-search label:first-child { grid-column: 1 / -1; }
+  .review-keys { display: none; }
+  .review-actions .btn { flex: 1; }
+  .review-book { flex-direction: column; }
+  .review-cover { width: 140px; max-width: 140px; flex-basis: auto; }
+}

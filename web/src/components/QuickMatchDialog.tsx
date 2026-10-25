@@ -11,6 +11,7 @@ type Job = { id: string; library_id: string; status: string; total: number; done
 type Result = { item_id: string; title: string; status: string; message?: string; provider?: string; match_title?: string; match_author?: string; score?: number; exact?: boolean; fields?: string[]; cover?: boolean }
 
 const STATUS: Record<string, [string, string]> = { matched: ['Matched', 'st-ok'], skipped: ['Skipped', ''], low_confidence: ['Low confidence', 'st-warn'], not_found: ['No result', ''], failed: ['Failed', 'st-danger'] }
+const uncertain = (j: Job) => (j.counts.low_confidence || 0) + (j.counts.not_found || 0)
 const DEFAULTS: MatchOptions = { override_details: false, override_cover: false, update_authors: false, update_series: false }
 
 export function MatchOptionsFields({ value, onChange }: { value: MatchOptions; onChange: (v: MatchOptions) => void }) {
@@ -72,6 +73,7 @@ export function QuickMatchDialog({ library, ids, onClose, onDone }: { library: s
       {job && <section className="stack" aria-live="polite">
         <div className="row"><b className="grow">{active ? `Matching… ${job.done} of ${job.total}` : job.status === 'complete' ? `Finished · ${job.total} books` : job.status === 'cancelled' ? `Cancelled after ${job.done} of ${job.total}` : `Stopped: ${job.error || job.status}`}</b>{active && <button type="button" className="btn danger" onClick={cancel}>Cancel</button>}</div>
         <span className="match-progress" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}><span style={{ width: `${pct}%` }} /></span>
+        {!active && uncertain(job) > 0 && <div className="row"><Link className="btn primary" to={`/review/${job.id}${job.counts.low_confidence ? '' : '?status=not_found'}`} onClick={onClose}>Review {uncertain(job)} uncertain {uncertain(job) === 1 ? 'match' : 'matches'}</Link></div>}
         <Segmented size="sm" label="Show" value={filter} onChange={f => { setFilter(f); void load(job.id, f) }} options={[{ value: '', label: `All ${job.done}` }, ...Object.entries(STATUS).filter(([k]) => job.counts[k]).map(([k, [label]]) => ({ value: k, label: `${label} ${job.counts[k]}` }))]} />
         {results.length > 0 && <div className="match-results">{results.map(r => <div className="match-result" key={r.item_id}>
           <span className={`badge ${STATUS[r.status]?.[1] || ''}`}>{STATUS[r.status]?.[0] || r.status}</span>
