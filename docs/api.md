@@ -177,6 +177,28 @@ author (≥ 0.8) and, when both runtimes are known, a runtime within about 25%. 
 adds a missing cover; the options allow replacing details, covers, authors or series. Tags and the explicit flag are never
 changed by quick match because they can affect library access.
 
+### Author profiles
+
+Like Audiobookshelf's author match: Audnexus (`api.audnex.us`, the Audible provider's region, the shared ~1 request/s
+limit) supplies an author's ASIN, biography (HTML converted to plain text) and photo. An author is visible when one of
+the person's books credits it; changes need metadata editing permission. Photos are stored as content-addressed native
+artwork (JPEG, PNG or WebP, up to 10 MB and 40 megapixels) and included in application bundles; photos imported from
+Audiobookshelf's metadata folder keep being served from the read-only mount.
+
+| Method | Path | Result |
+| --- | --- | --- |
+| GET | `/catalog/authors/{id}` | `{id, name, asin, description, image, has_image, last_matched, updated_at, books, can_edit}`; `image` is a versioned photo URL or `""` |
+| PUT | `/catalog/authors/{id}` | `{name?, description?, asin?, remove_image?, image_url?}` → the author. A new name is written to every book crediting the author (409 when another author has it); `image_url` is downloaded through the guarded fetcher |
+| GET/HEAD | `/catalog/authors/{id}/image?v=` | The photo with its own content type; `v=` URLs are `private, immutable`, native photos carry an `ETag` |
+| POST · DELETE | `/catalog/authors/{id}/image` | Upload multipart `file` as the photo, or remove it → the author |
+| POST | `/catalog/authors/{id}/match` | `{asin?, name?}` → `{result:{status: matched\|skipped\|not_found\|failed, asin, match_name, distance, fields, image, message}, author}`. An ASIN is looked up directly; otherwise the author's known ASIN, then the closest name in the Audnexus search (at most 3 edits, fewer for very short names). A single match replaces the biography and photo; `failed` answers 502 |
+| POST | `/catalog/author-match-jobs` | `{library_id, only_missing:true}` → `202 {id, total}`. With `only_missing` (default) only authors lacking a photo or biography are visited and existing ones are kept. Shares the one-running-match-job-per-person rule with book quick match (409) |
+| GET | `/catalog/author-match-jobs?library=` · `/catalog/author-match-jobs/{job}?status=&offset=&limit=` | Recent author jobs (`status`, `done`/`total`, `counts`, `options.only_missing`); one job with per-author `results` (`author_id`, `name`, …as above) |
+| DELETE | `/catalog/author-match-jobs/{job}` | Cancel a running job, or delete a finished job's report |
+
+The Audiobookshelf-compatible `/api/authors/{id}` (used by the iOS apps) includes `asin`, `description`, `imagePath` and
+an `updatedAt` that changes with the profile, and `/api/authors/{id}/image` serves the same photo.
+
 Native web playback reports accept `report_id`, `observed_at`, `current_time`,
 `listened`, `playing`, `close` and `ended`. Stable report IDs make retries
 idempotent. The compatibility `/api/session/{id}/sync` accepts `reportId` and

@@ -183,6 +183,28 @@ func inspect(ctx context.Context, db *sql.DB) ([]Root, []string, error) {
 	if err != nil {
 		return nil, nil, err
 	}
+	// Author photos are native artwork referenced from author entities.
+	rows, err = db.QueryContext(ctx, `SELECT substr(json_extract(document,'$.imagePath'),20) FROM catalog_entities WHERE kind='authors' AND json_extract(document,'$.imagePath') LIKE '/pocket-native-art/%'`)
+	if err != nil {
+		return nil, nil, err
+	}
+	for rows.Next() {
+		var name string
+		if err = rows.Scan(&name); err != nil {
+			rows.Close()
+			return nil, nil, err
+		}
+		if !validName("native-art/" + name) {
+			rows.Close()
+			return nil, nil, errors.New("invalid author photo path in catalog")
+		}
+		needed["native-art/"+name] = true
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return nil, nil, err
+	}
 	names := []string{}
 	for name := range needed {
 		names = append(names, name)

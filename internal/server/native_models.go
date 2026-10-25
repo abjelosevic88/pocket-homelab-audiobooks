@@ -403,10 +403,14 @@ func (s *Server) nativeGroups(ctx context.Context, items []nativeObject, key str
 		if err := s.store.DB.QueryRowContext(ctx, `SELECT document FROM catalog_entities WHERE kind=? AND id=?`, key, g["id"]).Scan(&raw); err == nil {
 			var entity nativeObject
 			if json.Unmarshal([]byte(raw), &entity) == nil {
-				for _, k := range []string{"description", "imagePath"} {
+				for _, k := range []string{"description", "imagePath", "asin"} {
 					if entity[k] != nil {
 						g[k] = entity[k]
 					}
+				}
+				// Clients version author photos by updatedAt.
+				if entity["updatedAt"] != nil {
+					g["updatedAt"] = nativeMillis(entity["updatedAt"])
 				}
 			}
 		}

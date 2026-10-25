@@ -531,7 +531,7 @@ func (s *Server) nativeImage(w http.ResponseWriter, r *http.Request, path string
 		writeErr(w, 404, "image not found")
 		return
 	}
-	w.Header().Set("Content-Type", "image/jpeg")
+	w.Header().Set("Content-Type", imageType(path))
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	http.ServeContent(w, r, filepath.Base(path), st.ModTime(), file)
 }
