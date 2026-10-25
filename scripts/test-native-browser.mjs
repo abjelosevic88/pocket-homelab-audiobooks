@@ -25,6 +25,8 @@ try {
   await page.getByRole('button', { name: 'More', exact: true }).click()
   await page.getByText('Edit book', { exact: true }).click()
   await page.getByText('Find metadata', { exact: true }).click()
+  // Audible is first in match order; this test serves a fake Open Library.
+  await page.getByLabel('Metadata provider').selectOption({ label: 'Open Library' })
   await page.getByRole('button', { name: 'Search metadata', exact: true }).click()
   await page.getByRole('button', { name: 'Use this metadata', exact: true }).click()
   await page.waitForFunction(() => [...document.querySelectorAll('input')].some(i => i.value === 'Matched in browser'))
