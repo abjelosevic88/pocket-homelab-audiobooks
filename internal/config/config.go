@@ -80,6 +80,11 @@ type Config struct {
 	CoreRegistrationKey string
 	CoreAppURL          string // how Core reaches this app; defaults to BASE_URL
 
+	// Live transcoding (HLS): segment cache under DATA_DIR/cache/hls and the
+	// number of concurrent encoders for listeners and for public shares.
+	HLSCacheBytes    int64
+	HLSEncoders      int
+	HLSShareEncoders int
 }
 
 func env(key, def string) string {
@@ -206,6 +211,9 @@ func Load() (*Config, error) {
 	if c.SyncEvery < time.Minute {
 		c.SyncEvery = time.Minute
 	}
+	c.HLSCacheBytes = envInt64("HLS_CACHE_MB", 1024) << 20
+	c.HLSEncoders = envInt("HLS_ENCODERS", 4)
+	c.HLSShareEncoders = envInt("HLS_SHARE_ENCODERS", 2)
 	return c, nil
 }
 

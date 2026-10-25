@@ -37,7 +37,8 @@ A **book** is a native library item trimmed to what a screen needs — `id`, `li
 | `POST /sessions/{sid}/sync` | `{"current_time","listened","duration","playing","item_id","client"}` every 15 seconds and on pause; `"close":true` when stopping, `"ended":true` at the end. Saves the person's place locally; native sessions survive restarts |
 | `GET /next?after=<id>` | What plays after a book: Up next first, else the next book of its series |
 | `GET /now-playing?client=&session=` | What the person plays elsewhere: another browser, or a connected native client (their newest listening session): `active`, `playing`, `item_id`, `title`, `position`, `device`, `app`, `updated_at` |
-| `GET /media/api/items/{id}/file/{ino}` · `GET /media/hls/{sid}/{file}` | Local files and FFmpeg HLS playlists/segments, with ownership checks and byte ranges. |
+| `GET /media/api/items/{id}/file/{ino}` · `GET /media/hls/{sid}/{file}` | Local files and FFmpeg HLS playlists/segments, with ownership checks and byte ranges. One continuous FFmpeg encoder per session produces the segments (gapless boundaries); it runs a few minutes ahead, restarts on far seeks and stops when the session closes or stays idle for 2 minutes |
+| `GET /events` | Live updates (Server-Sent Events, one JSON object per `data:` line): `progress` (another device moved a place), `session` (a session opened/closed), `items` (`updated`/`added` ids after edits, matches and scans), `scan_complete`. Only the person's own events and books they can read. Audiobookshelf apps get the same over Socket.IO (`/socket.io/`, polling with WebSocket upgrade): `user_item_progress_updated`, `item_updated`/`items_updated`, `item_added`/`items_added`, `user_session_closed`, `scan_complete` |
 
 ## Up next
 

@@ -191,6 +191,9 @@ func (s *Server) handleSync(w http.ResponseWriter, r *http.Request) {
 		ps.position, ps.playing, ps.updated = in.CurrentTime, in.Playing && !in.Close, time.Now()
 	}
 	s.playMu.Unlock()
+	if ps != nil {
+		s.realtimeSend(u.ID, map[string]any{"type": "session", "session_id": sid, "closed": in.Close || in.Ended})
+	}
 	ac := s.ab(w, r)
 	if ac == nil {
 		return

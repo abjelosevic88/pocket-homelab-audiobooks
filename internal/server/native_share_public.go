@@ -112,7 +112,7 @@ func (s *Server) nativePublicShare(w http.ResponseWriter, r *http.Request) {
 			}
 			for _, tr := range tracks {
 				if tr.Item == parts[1] && tr.File == parts[2] {
-					s.nativeHLSTracks(w, r, v.UserID, tr.Item, []library.Track{{ID: tr.File, Duration: tr.Duration, MIME: tr.MIME}}, parts[3])
+					s.nativeHLSTracks(w, r, v.UserID, tr.Item, []library.Track{{ID: tr.File, Duration: tr.Duration, MIME: tr.MIME}}, parts[3], "p:"+v.ID+":"+r.RemoteAddr+":"+tr.Item+":"+tr.File, hlsPoolShare)
 					return
 				}
 			}

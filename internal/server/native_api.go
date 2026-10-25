@@ -224,6 +224,7 @@ func (s *Server) nativeAPI(w http.ResponseWriter, r *http.Request, uid int64) {
 				s.nativeError(w, err)
 				return
 			}
+			s.nativeSessionOpened(uid, sess.ID)
 			it, err := s.nativeItem(ctx, uid, id)
 			if err != nil {
 				s.nativeError(w, err)
@@ -337,6 +338,9 @@ func (s *Server) nativeAPI(w http.ResponseWriter, r *http.Request, uid int64) {
 			}
 			if out.ProgressApplied {
 				s.nativeSocketProgress(ctx, uid, sid)
+			}
+			if report.Close && !out.Duplicate {
+				s.nativeSessionClosed(ctx, uid, sid)
 			}
 			if out.FinishedNow {
 				s.nativeNotifyFinished(ctx, uid, sess.ItemID)
@@ -838,6 +842,9 @@ func (s *Server) nativeWebSync(w http.ResponseWriter, r *http.Request) {
 	}
 	if out.ProgressApplied {
 		s.nativeSocketProgress(r.Context(), uid, id)
+	}
+	if (in.Close || in.Ended) && !out.Duplicate {
+		s.nativeSessionClosed(r.Context(), uid, id)
 	}
 	if out.FinishedNow {
 		if session, err := s.catalog().Session(r.Context(), uid, id); err == nil {
