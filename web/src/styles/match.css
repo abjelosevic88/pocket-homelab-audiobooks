@@ -1,0 +1,28 @@
+/* Match and quick match dialogs */
+.match-search { display: grid; grid-template-columns: minmax(120px, 160px) 1fr 1fr auto; gap: 8px; align-items: end; }
+@media (max-width: 767px) { .match-search { grid-template-columns: 1fr; } }
+.match-list { display: flex; flex-direction: column; gap: 6px; }
+.match-cand { display: flex; gap: 12px; align-items: flex-start; padding: 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); cursor: pointer; text-align: left; color: var(--text); font: inherit; width: 100%; }
+.match-cand:hover { background: var(--hover); }
+.match-cand:focus-visible { outline: 2px solid var(--accent-ring); outline-offset: 1px; }
+.match-cover { width: 64px; height: 64px; flex: 0 0 64px; border-radius: var(--radius-sm); object-fit: cover; background: var(--surface-3); }
+.match-cover.lg { width: 96px; height: 96px; flex-basis: 96px; }
+.match-body { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.match-body b { overflow-wrap: anywhere; }
+.match-meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 12.5px; color: var(--muted); }
+.match-fields { width: 100%; border-collapse: collapse; font-size: 13px; }
+.match-fields th, .match-fields td { padding: 7px 8px; border-bottom: 1px solid var(--hairline); vertical-align: top; text-align: left; }
+.match-fields th { color: var(--muted); font-weight: 600; font-size: 12px; }
+.match-fields td.val { max-width: 280px; overflow-wrap: anywhere; color: var(--text-2); }
+.match-fields td.val.new { color: var(--text); }
+.match-fields td.val .clamp { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; white-space: pre-line; }
+.match-fields tr.same td.val { color: var(--faint); }
+.match-covers { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+.match-progress { display: block; height: 6px; border-radius: 3px; background: var(--surface-3); overflow: hidden; }
+.match-progress > span { display: block; height: 100%; background: var(--accent); transition: width .3s var(--ease); }
+.match-results { display: flex; flex-direction: column; max-height: 340px; overflow: auto; border: 1px solid var(--border); border-radius: var(--radius); }
+.match-result { display: flex; gap: 10px; align-items: center; padding: 8px 10px; border-bottom: 1px solid var(--hairline); font-size: 13px; }
+.match-result:last-child { border-bottom: 0; }
+.match-result .grow { min-width: 0; }
+.match-result a { color: var(--text); }
+.match-options { display: grid; gap: 4px; }

@@ -1,0 +1,41 @@
+{
+ "asin": "B08G9PRS1K",
+ "brandIntroDurationMs": 0,
+ "brandOutroDurationMs": 0,
+ "chapters": [
+  {
+   "lengthMs": 11264,
+   "startOffsetMs": 0,
+   "startOffsetSec": 0,
+   "title": "Opening Credits"
+  },
+  {
+   "lengthMs": 5909,
+   "startOffsetMs": 11264,
+   "startOffsetSec": 11,
+   "title": "Dedication"
+  },
+  {
+   "lengthMs": 2203838,
+   "startOffsetMs": 17173,
+   "startOffsetSec": 17,
+   "title": "Chapter 1"
+  },
+  {
+   "lengthMs": 1721480,
+   "startOffsetMs": 2221011,
+   "startOffsetSec": 2221,
+   "title": "Chapter 2"
+  },
+  {
+   "lengthMs": 2241213,
+   "startOffsetMs": 3942491,
+   "startOffsetSec": 3942,
+   "title": "Chapter 3"
+  }
+ ],
+ "isAccurate": true,
+ "region": "us",
+ "runtimeLengthMs": 58244201,
+ "runtimeLengthSec": 58244
+}

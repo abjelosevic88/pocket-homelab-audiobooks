@@ -1,5 +1,6 @@
 // The library: books (sorted, filtered, loading more as you scroll), series and authors, one library at a time.
 import {BulkBookEditor} from '../components/BulkBookEditor'
+import {QuickMatchDialog} from '../components/QuickMatchDialog'
 import {useApp} from '../lib/app-context'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { NavLink, useSearchParams } from 'react-router-dom'
@@ -101,7 +102,7 @@ function usePaged<T>(url: (page: number) => string, key: string) {
 
 function Books({ lib }: { lib: string }) {
   const {settings}=useApp()
-  const [selecting,setSelecting]=useState(false),[selected,setSelected]=useState<string[]>([]),[editing,setEditing]=useState(false),[revision,setRevision]=useState(0)
+  const [selecting,setSelecting]=useState(false),[selected,setSelected]=useState<string[]>([]),[editing,setEditing]=useState(false),[matching,setMatching]=useState<string[]|null>(null),[revision,setRevision]=useState(0)
 
   const [sp, setSp] = useSearchParams()
   const sort = sp.get('sort') || 'added'
@@ -128,6 +129,7 @@ function Books({ lib }: { lib: string }) {
         {(genre || narrator) && <button type="button" className="chip on" onClick={() => { set('genre', ''); set('narrator', '') }}>{genre ? `Genre: ${genre}` : `Read by ${narrator}`}<Icon name="x" size={12} /></button>}
         {settings?.backend==='native'&&<button className="btn" onClick={()=>{setSelecting(!selecting);setSelected([])}}>{selecting?'Cancel selection':'Select books'}</button>}
         {selecting&&<><button className="btn" onClick={()=>setSelected(items.slice(0,100).map(b=>b.id))}>Select visible books</button><button className="btn primary" disabled={!selected.length} onClick={()=>setEditing(true)}>Edit selected ({selected.length})</button></>}
+        {settings?.backend==='native'&&<button className="btn" disabled={selecting&&!selected.length} onClick={()=>setMatching(selecting?selected:[])}>{selecting?`Quick match selected (${selected.length})`:'Quick match'}</button>}
         <span className="spacer" />
         <span className="muted small">{total >= 0 ? `${total.toLocaleString()} ${total === 1 ? 'book' : 'books'}` : ''}</span>
         <Select ariaLabel="Sort" value={sort} onChange={v => set('sort', v)} options={SORTS} />
@@ -136,6 +138,7 @@ function Books({ lib }: { lib: string }) {
       {total === 0 ? <Empty title="No books here" icon="book">{show !== 'all' ? 'Nothing matches this filter.' : 'This library is empty.'}</Empty> : (
         <div className="grid-covers">{items.map(b => selecting?<div key={b.id}><label><input type="checkbox" aria-label={`Select ${b.title}`} disabled={selected.length>=100&&!selected.includes(b.id)} checked={selected.includes(b.id)} onChange={e=>setSelected(v=>e.target.checked?[...v,b.id]:v.filter(id=>id!==b.id))}/> Select</label><BookCard b={b}/></div>:<BookCard key={b.id} b={b} />)}</div>
       )}
+      {matching&&<QuickMatchDialog library={lib} ids={matching} onClose={()=>setMatching(null)} onDone={()=>setRevision(n=>n+1)}/>}
       {editing&&<BulkBookEditor ids={selected} onClose={()=>setEditing(false)} onSaved={()=>{setEditing(false);setSelecting(false);setRevision(n=>n+1)}}/>}
       <div ref={more} className="more-sentinel">{busy && <Loading label="" />}</div>
     </>

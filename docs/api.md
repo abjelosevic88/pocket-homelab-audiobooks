@@ -151,6 +151,28 @@ refer to folders already mounted into the container.
 | POST | `/catalog/items/{id}/cover` | Upload `file` as a JPEG/PNG cover |
 | POST | `/upload` | Stream multipart files into a validated new book; refuses existing destination |
 
+### Metadata match
+
+Requires metadata editing permission. Providers are tried in match order (Settings → Metadata providers);
+`provider=` restricts a request to one. Searching never changes a book.
+
+| Method | Path | Result |
+| --- | --- | --- |
+| GET | `/catalog/metadata/providers` · PUT (admin) | Providers with `kind` (`audible`, `openlibrary`, `google`, `custom`), `region` (Audible), `priority` (match order, lowest first) |
+| GET | `/catalog/metadata/search?provider=&q=&author=&isbn=` | Raw provider results; `provider=audible&asin=` returns one Audnexus detail record |
+| GET | `/catalog/items/{id}/match?provider=&title=&author=` | `{item:{metadata, expected_updated_at, has_cover, duration}, query, provider, candidates:[{id, provider, title, authors, cover, duration, metadata, score:{total, title, author, duration, exact, confident}}], errors}`. Title/author default to the cleaned book title and first author; an ASIN on the book is looked up directly |
+| POST | `/catalog/items/{id}/match` | `{expected_updated_at, metadata:{…chosen fields}, cover:"url"}` — applies through the editor (409 when stale); the cover is downloaded and validated before anything changes |
+| POST | `/catalog/items/{id}/quick-match` | `{provider?, override_details, override_cover, update_authors, update_series}` → `{status: matched\|skipped\|low_confidence\|not_found\|failed, fields, cover, match_title, score, exact, message}` |
+| GET | `/catalog/items/{id}/audible-chapters?asin=&region=` | Audible chapter markers via Audnexus, clamped to the book: `{chapters, runtime, duration, difference, mismatch}` (`mismatch` when runtimes differ by more than 2 minutes). Nothing is saved |
+| POST | `/catalog/match-jobs` | Bulk quick match in the background: `{library_id}` or `{ids:[…≤1000]}` plus the quick-match options → `202 {id, total}`; one running job per person (409) |
+| GET | `/catalog/match-jobs?library=` · `/catalog/match-jobs/{job}?status=&offset=&limit=` | Recent jobs with `status`, `done`/`total`, `counts` per result status; one job with per-book `results` |
+| DELETE | `/catalog/match-jobs/{job}` | Cancel a running job (the book in progress is left unchanged), or delete a finished job's report |
+
+Quick match applies a result only when it is confident: the same ASIN/ISBN, or title similarity ≥ 0.9 with a matching
+author (≥ 0.8) and, when both runtimes are known, a runtime within about 25%. By default it only fills empty fields and
+adds a missing cover; the options allow replacing details, covers, authors or series. Tags and the explicit flag are never
+changed by quick match because they can affect library access.
+
 Native web playback reports accept `report_id`, `observed_at`, `current_time`,
 `listened`, `playing`, `close` and `ended`. Stable report IDs make retries
 idempotent. The compatibility `/api/session/{id}/sync` accepts `reportId` and

@@ -21,6 +21,8 @@ type nativeProvider struct {
 	HasSecret bool   `json:"has_secret"`
 	Enabled   bool   `json:"enabled"`
 	Revision  int64  `json:"revision"`
+	Region    string `json:"region"`   // Audible only; empty uses AUDIBLE_REGION
+	Priority  int    `json:"priority"` // match order, lowest first
 }
 
 func (s *Server) nativeProviders(w http.ResponseWriter, r *http.Request) {
@@ -41,11 +43,11 @@ func (s *Server) nativeProviders(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if r.Method == "GET" {
-		q := `SELECT id,kind,name,url,secret<>'',enabled,revision FROM catalog_metadata_providers`
+		q := `SELECT id,kind,name,url,secret<>'',enabled,revision,region,priority FROM catalog_metadata_providers`
 		if !admin || r.URL.Query().Get("manage") != "1" {
 			q += ` WHERE enabled=1`
 		}
-		q += ` ORDER BY name`
+		q += ` ORDER BY priority,name`
 		rows, err := s.store.DB.QueryContext(r.Context(), q)
 		if err != nil {
 			s.nativeError(w, err)
@@ -55,7 +57,7 @@ func (s *Server) nativeProviders(w http.ResponseWriter, r *http.Request) {
 		out := []nativeProvider{}
 		for rows.Next() {
 			var p nativeProvider
-			if err = rows.Scan(&p.ID, &p.Kind, &p.Name, &p.URL, &p.HasSecret, &p.Enabled, &p.Revision); err != nil {
+			if err = rows.Scan(&p.ID, &p.Kind, &p.Name, &p.URL, &p.HasSecret, &p.Enabled, &p.Revision, &p.Region, &p.Priority); err != nil {
 				s.nativeError(w, err)
 				return
 			}
@@ -100,8 +102,23 @@ func (s *Server) nativeProviders(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, 400, "use an HTTP or HTTPS provider address without a query")
 			return
 		}
-	} else if in.ID != "openlibrary" && in.ID != "google" {
+	} else if in.ID != "openlibrary" && in.ID != "google" && in.ID != "audible" {
 		writeErr(w, 400, "invalid provider type")
+		return
+	}
+	in.Region = strings.ToLower(strings.TrimSpace(in.Region))
+	if in.Kind != "audible" {
+		in.Region = ""
+	}
+	if in.Region != "" && !metadata.ValidRegion(in.Region) {
+		writeErr(w, 400, "unknown Audible region")
+		return
+	}
+	if in.Priority == 0 {
+		in.Priority = 100
+	}
+	if in.Priority < 1 || in.Priority > 1000 {
+		writeErr(w, 400, "match order must be 1 to 1000")
 		return
 	}
 	tx, err := s.store.DB.BeginTx(r.Context(), nil)
@@ -141,7 +158,7 @@ func (s *Server) nativeProviders(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 400, "Google Books needs an API key")
 		return
 	}
-	_, err = tx.ExecContext(r.Context(), `INSERT INTO catalog_metadata_providers VALUES(?,?,?,?,?,?,1) ON CONFLICT(id) DO UPDATE SET name=excluded.name,url=excluded.url,secret=excluded.secret,enabled=excluded.enabled,revision=catalog_metadata_providers.revision+1`, in.ID, in.Kind, in.Name, strings.TrimRight(in.URL, "/"), secret, in.Enabled)
+	_, err = tx.ExecContext(r.Context(), `INSERT INTO catalog_metadata_providers(id,kind,name,url,secret,enabled,revision,region,priority) VALUES(?,?,?,?,?,?,1,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,url=excluded.url,secret=excluded.secret,enabled=excluded.enabled,region=excluded.region,priority=excluded.priority,revision=catalog_metadata_providers.revision+1`, in.ID, in.Kind, in.Name, strings.TrimRight(in.URL, "/"), secret, in.Enabled, in.Region, in.Priority)
 	if err != nil {
 		s.nativeError(w, err)
 		return
@@ -160,7 +177,7 @@ func (s *Server) nativeMetadataClient() metadata.Client {
 func (s *Server) nativeProvider(ctx context.Context, id string) (metadata.Provider, error) {
 	var p metadata.Provider
 	var sealed string
-	err := s.store.DB.QueryRowContext(ctx, `SELECT id,kind,url,secret FROM catalog_metadata_providers WHERE id=? AND enabled=1`, id).Scan(&p.ID, &p.Kind, &p.URL, &sealed)
+	err := s.store.DB.QueryRowContext(ctx, `SELECT id,kind,url,secret,region FROM catalog_metadata_providers WHERE id=? AND enabled=1`, id).Scan(&p.ID, &p.Kind, &p.URL, &sealed, &p.Region)
 	if errors.Is(err, sql.ErrNoRows) {
 		return p, library.ErrNotFound
 	}
@@ -193,6 +210,15 @@ func (s *Server) nativeMetadataSearch(w http.ResponseWriter, r *http.Request) {
 	}
 	if id := r.URL.Query().Get("work"); id != "" && p.Kind == "openlibrary" {
 		result, err := s.nativeMetadataClient().Work(r.Context(), id)
+		if err != nil {
+			writeErr(w, 502, err.Error())
+			return
+		}
+		writeJSON(w, 200, result)
+		return
+	}
+	if asin := r.URL.Query().Get("asin"); asin != "" && p.Kind == "audible" {
+		result, err := s.nativeMetadataClient().AudibleBook(r.Context(), p.ID, p.Region, asin)
 		if err != nil {
 			writeErr(w, 502, err.Error())
 			return
