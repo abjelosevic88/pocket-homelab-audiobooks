@@ -5,6 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"image"
+	_ "image/jpeg"
+	_ "image/png"
+	"io"
 	"os"
 	"os/exec"
 	"strconv"
@@ -95,13 +99,62 @@ func Probe(ctx context.Context, binary string, file *os.File) (ProbeResult, erro
 	if out.Codec == "" || !validSeconds(out.Duration) || out.Duration <= 0 {
 		return ProbeResult{}, ErrNoAudio
 	}
-	for i, ch := range raw.Chapters {
+	for _, ch := range raw.Chapters {
 		start, e1 := strconv.ParseFloat(ch.Start, 64)
 		end, e2 := strconv.ParseFloat(ch.End, 64)
-		if e1 != nil || e2 != nil || !validSeconds(start) || !validSeconds(end) || end < start || end > out.Duration+1 {
-			return ProbeResult{}, fmt.Errorf("invalid embedded chapter")
+		if e1 != nil || e2 != nil {
+			continue
 		}
-		out.Chapters = append(out.Chapters, Chapter{ID: i, Start: start, End: end, Title: ch.Tags["title"]})
+		out.Chapters = append(out.Chapters, Chapter{Start: start, End: end, Title: ch.Tags["title"]})
 	}
+	out.Chapters = clampChapters(out.Chapters, out.Duration)
 	return out, nil
+}
+
+// clampChapters keeps a file playable when its embedded chapter table is a
+// little longer than the audio (common after re-encoding): ends past the
+// duration are clamped and chapters starting at or beyond it are dropped.
+func clampChapters(in []Chapter, duration float64) []Chapter {
+	out := []Chapter{}
+	for _, ch := range in {
+		if !validSeconds(ch.Start) || !validSeconds(ch.End) || ch.End < ch.Start || ch.Start >= duration {
+			continue
+		}
+		ch.End = min(ch.End, duration)
+		ch.ID = len(out)
+		out = append(out, ch)
+	}
+	return out
+}
+
+// ExtractCover copies the first embedded picture out of an audio file. Like
+// Probe it reads only an inherited descriptor with network protocols disabled.
+func ExtractCover(ctx context.Context, binary string, file *os.File) ([]byte, string, error) {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	for _, codec := range []string{"copy", "png"} {
+		cmd := exec.CommandContext(ctx, binary, "-nostdin", "-v", "error", "-protocol_whitelist", "file,pipe", "-i", "/proc/self/fd/3", "-map", "0:v:0", "-frames:v", "1", "-c:v", codec, "-f", "image2pipe", "pipe:1")
+		cmd.ExtraFiles = []*os.File{file}
+		var data boundedCoverOutput
+		cmd.Stdout = &data
+		if err := cmd.Run(); err != nil {
+			return nil, "", fmt.Errorf("extract cover: %w", err)
+		}
+		if _, format, err := image.DecodeConfig(bytes.NewReader(data.Bytes())); err == nil && (format == "jpeg" || format == "png") {
+			return data.Bytes(), format, nil
+		}
+		if _, err := file.Seek(0, io.SeekStart); err != nil {
+			return nil, "", err
+		}
+	}
+	return nil, "", fmt.Errorf("embedded cover is not a JPEG or PNG image")
+}
+
+type boundedCoverOutput struct{ bytes.Buffer }
+
+func (b *boundedCoverOutput) Write(p []byte) (int, error) {
+	if b.Len()+len(p) > 16<<20 {
+		return 0, fmt.Errorf("embedded cover exceeds limit")
+	}
+	return b.Buffer.Write(p)
 }

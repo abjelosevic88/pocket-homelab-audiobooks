@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"path/filepath"
 	"time"
 
 	"github.com/abjelosevic88/pocket-homelab-audiobooks/internal/library"
@@ -63,7 +64,7 @@ func (s *Server) startNativeScan(uid int64, lib string, force bool, sidecars ...
 	go func() {
 		defer cancel()
 		var id string
-		report, err := s.catalog().Scan(ctx, uid, lib, library.ScanOptions{FFprobe: s.cfg.FFprobe, Force: force, ImportMetadata: len(sidecars) > 0 && sidecars[0], Started: func(value string) {
+		report, err := s.catalog().Scan(ctx, uid, lib, library.ScanOptions{FFprobe: s.cfg.FFprobe, FFmpeg: s.cfg.FFmpeg, ArtDir: filepath.Join(s.cfg.DataDir, "native-art"), Force: force, ImportMetadata: len(sidecars) > 0 && sidecars[0], Started: func(value string) {
 			id = value
 			s.nativeScanMu.Lock()
 			s.nativeScanCancel[id] = cancel
@@ -76,7 +77,7 @@ func (s *Server) startNativeScan(uid int64, lib string, force bool, sidecars ...
 		if err != nil {
 			s.log.Warn("native library scan", "library", lib, "error", err)
 		} else {
-			s.log.Info("native library scan complete", "library", lib, "added", report.Added, "updated", report.Updated, "missing", report.Missing)
+			s.log.Info("native library scan complete", "library", lib, "added", report.Added, "updated", report.Updated, "missing", report.Missing, "quarantined", report.Quarantined)
 		}
 		done <- err
 	}()

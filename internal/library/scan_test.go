@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/abjelosevic88/pocket-homelab-audiobooks/internal/library"
@@ -99,16 +100,38 @@ func TestNativeScannerIncrementalMovesAndAtomicFailure(t *testing.T) {
 	if err != nil || tracks[0].ID != originalID {
 		t.Fatalf("move changed identity %+v %v", tracks, err)
 	}
-	// A broken newly arrived file aborts the whole scan; old media remains usable.
+	// A broken newly arrived file quarantines only its book: that book's record
+	// is untouched, a broken new book is not created, and healthy books commit.
 	if err = os.WriteFile(filepath.Join(moved, "bad.mp3"), []byte("not audio"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = c.Scan(ctx, 2, "scanlib", library.ScanOptions{FFprobe: ffprobe}); err == nil {
-		t.Fatal("invalid audio accepted")
+	brokenNew := filepath.Join(root, "Broken new book")
+	healthy := filepath.Join(root, "Healthy new book")
+	for _, d := range []string{brokenNew, healthy} {
+		if err = os.Mkdir(d, 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err = os.WriteFile(filepath.Join(brokenNew, "bad.mp3"), []byte("not audio"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := exec.Command(ffmpeg, "-nostdin", "-loglevel", "error", "-f", "lavfi", "-i", "sine=frequency=440", "-t", "1", filepath.Join(healthy, "one.mp3")).CombinedOutput(); err != nil {
+		t.Fatalf("audio fixture: %v %s", err, out)
+	}
+	r = scan()
+	if r.Added != 1 || r.Quarantined != 2 || len(r.Failures) != 2 {
+		t.Fatalf("quarantine: %+v", r)
 	}
 	again, _ := c.Item(ctx, 2, id)
 	if string(again.Document) != string(it.Document) {
-		t.Fatal("failed scan mutated catalog")
+		t.Fatal("quarantined book mutated")
+	}
+	var runReport string
+	if err = c.DB.QueryRow(`SELECT report FROM catalog_scan_runs WHERE id=? AND status='complete'`, r.ID).Scan(&runReport); err != nil || !strings.Contains(runReport, `"quarantined":2`) || !strings.Contains(runReport, "Broken new book") {
+		t.Fatalf("scan run report %s %v", runReport, err)
+	}
+	if err = os.RemoveAll(brokenNew); err != nil {
+		t.Fatal(err)
 	}
 	if err = os.Remove(filepath.Join(moved, "bad.mp3")); err != nil {
 		t.Fatal(err)
