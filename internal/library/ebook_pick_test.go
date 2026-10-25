@@ -13,6 +13,10 @@ func TestPickEbookKeepsCurrentThenPrefersEPUB(t *testing.T) {
 	if got := pickEbook([]sourceRow{epub, guide, mobi}, file("Book [Companion].epub")); str(object(got["metadata"])["relPath"]) != "Book [Companion].epub" {
 		t.Fatalf("rescan replaced the chosen ebook with %v", got)
 	}
+	disc1, disc2 := file("Author/Book/CD 01/Book.epub"), file("Author/Book/CD 02/Book.epub")
+	if got := pickEbook([]sourceRow{disc1, disc2}, file("CD 02/Book.epub")); str(object(got["metadata"])["relPath"]) != "Author/Book/CD 02/Book.epub" {
+		t.Fatalf("book-relative imported path matched %v", got)
+	}
 	if got := pickEbook([]sourceRow{mobi, epub}, file("Gone.epub")); str(object(got["metadata"])["relPath"]) != "Book.epub" {
 		t.Fatalf("missing current ebook fell back to %v, want EPUB", got)
 	}

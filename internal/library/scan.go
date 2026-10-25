@@ -1180,7 +1180,8 @@ func pickEbook(files []sourceRow, current sourceRow) sourceRow {
 	if current != nil {
 		rel := str(object(current["metadata"])["relPath"])
 		for _, f := range files {
-			if rel != "" && str(object(f["metadata"])["relPath"]) == rel {
+			// Imported records may hold the path relative to the book folder.
+			if r := str(object(f["metadata"])["relPath"]); rel != "" && (r == rel || strings.HasSuffix(r, "/"+rel)) {
 				return f
 			}
 		}
