@@ -12,6 +12,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"maps"
 	"math"
 	"net/http"
 	"regexp"
@@ -355,7 +356,14 @@ func (s *Server) quickMatchOne(ctx context.Context, uid int64, id string, provid
 		res.Status, res.Message = "low_confidence", "Details did not confirm the match"
 		return res
 	}
-	fields, keys := library.QuickMatchFields(cur, cand.Metadata, o)
+	proposed := cand.Metadata
+	if bestProvider.Kind == "openlibrary" || bestProvider.Kind == "google" {
+		// Book catalogues describe the print edition: its publisher is not the
+		// audiobook's, so quick match leaves that field for audio providers.
+		proposed = maps.Clone(proposed)
+		delete(proposed, "publisher")
+	}
+	fields, keys := library.QuickMatchFields(cur, proposed, o)
 	var cover []byte
 	if cand.Cover != "" && (!hasCover || o.OverrideCover) {
 		if data, _, err := fetch.Get(ctx, s.nativeFetchHTTP, cand.Cover, s.cfg.UserAgent, "", 16<<20); err == nil {
