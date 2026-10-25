@@ -1057,6 +1057,7 @@ func (c *Catalog) commitScannedBook(ctx context.Context, tx *sql.Tx, b *scanBook
 	chapters := []Chapter{}
 	duration := 0.0
 	audioIndex := 0
+	ebooks := []sourceRow{}
 	for _, f := range b.Files {
 		if f.Role == "audio" {
 			audioIndex++
@@ -1078,11 +1079,14 @@ func (c *Catalog) commitScannedBook(ctx context.Context, tx *sql.Tx, b *scanBook
 			}
 		}
 		if f.Role == "ebook" {
-			media["ebookFile"] = f.Doc
+			ebooks = append(ebooks, f.Doc)
 		}
 		if f.Role == "cover" && (b.New || str(media["coverPath"]) == "") {
 			media["coverPath"] = f.Source
 		}
+	}
+	if len(ebooks) > 0 {
+		media["ebookFile"] = pickEbook(ebooks, object(media["ebookFile"]))
 	}
 	// Imported/editable chapters and descriptive metadata win over auto-extraction.
 	if b.New || b.RebuildChapters || len(array(media["chapters"])) == 0 {
@@ -1164,4 +1168,32 @@ func (c *Catalog) commitScannedBook(ctx context.Context, tx *sql.Tx, b *scanBook
 // an unchanged book look modified on the next scan.
 func canonicalDoc(doc sourceRow) string {
 	return raw(objectJSON(raw(doc)))
+}
+
+// ebookRank orders formats the reader can open first; lower is better.
+var ebookRank = map[string]int{".epub": 0, ".pdf": 1, ".azw3": 2, ".mobi": 3, ".cbz": 4, ".cbr": 5}
+
+// pickEbook keeps the book's current ebook while it is still present, so a
+// rescan never swaps an EPUB for a MOBI twin or a companion booklet; otherwise
+// it prefers the most readable format, first file winning ties.
+func pickEbook(files []sourceRow, current sourceRow) sourceRow {
+	if current != nil {
+		rel := str(object(current["metadata"])["relPath"])
+		for _, f := range files {
+			if rel != "" && str(object(f["metadata"])["relPath"]) == rel {
+				return f
+			}
+		}
+	}
+	best, bestRank := files[0], 99
+	for _, f := range files {
+		r, ok := ebookRank[strings.ToLower(filepath.Ext(str(object(f["metadata"])["filename"])))]
+		if !ok {
+			r = 50
+		}
+		if r < bestRank {
+			best, bestRank = f, r
+		}
+	}
+	return best
 }
