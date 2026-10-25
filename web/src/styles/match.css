@@ -42,3 +42,12 @@
 .tidy-change { line-height: 1.5; }
 .tidy-change s { color: var(--muted); }
 .tidy-thumb { border-radius: 6px; object-fit: cover; flex: none; }
+
+/* Phones: stack each tidy row so the proposed change stays visible. */
+@media (max-width: 640px) {
+  .tidy-table thead { display: none; }
+  .tidy-table tr { display: grid; grid-template-columns: 28px 1fr; border-bottom: 1px solid var(--hairline); }
+  .tidy-table td { display: block; border: 0; }
+  .tidy-table td:first-child { grid-row: span 3; }
+  .tidy-table td + td { padding-top: 2px; padding-bottom: 2px; }
+}

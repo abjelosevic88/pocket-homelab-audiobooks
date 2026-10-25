@@ -171,6 +171,10 @@ export default function MatchReview() {
   // Reset the field choice when the candidate or the replace toggle changes.
   useEffect(() => {
     if (!cand || !data) { setPicks({}); setUseCover(false); return }
+    // An implausible candidate starts with nothing ticked, so a stray Accept
+    // cannot copy an unrelated book's details.
+    const sc = cand.score
+    if (!sc || sc.total < 0.7 || sc.title < 0.7 || sc.edition === false) { setPicks({}); setUseCover(false); return }
     const d = defaults(cand, data.item, replace, kindOf(cand.provider))
     setPicks(d.picks); setUseCover(d.cover)
   }, [cand?.provider, cand?.id, data, replace, kindOf]) // eslint-disable-line react-hooks/exhaustive-deps
