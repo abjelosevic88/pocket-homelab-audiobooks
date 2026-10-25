@@ -235,7 +235,7 @@ func (c *Catalog) Scan(ctx context.Context, uid int64, lib string, opt ScanOptio
 	if err != nil {
 		return report, err
 	}
-	_, err = c.DB.ExecContext(ctx, `INSERT INTO catalog_scan_runs VALUES(?,?,?,NULL,'running','{}')`, report.ID, lib, time.Now().UnixMilli())
+	_, err = c.DB.ExecContext(ctx, `INSERT INTO catalog_scan_runs(id,library_id,started_at,finished_at,status,report) VALUES(?,?,?,NULL,'running','{}')`, report.ID, lib, time.Now().UnixMilli())
 	if err != nil {
 		return report, fmt.Errorf("start scan (another scan may be running): %w", err)
 	}

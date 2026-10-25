@@ -125,6 +125,7 @@ func (s *Server) Router() http.Handler {
 				s.nativeAuthorRoutes(r) // native_authors.go
 				r.Post("/catalog/libraries/{id}/scan", s.nativeScanStart)
 				r.Put("/catalog/libraries/{id}/watch", s.nativeWatchSettings)
+				r.Put("/catalog/watch", s.nativeWatchAll)
 				r.Delete("/catalog/scans/{job}", s.nativeScanCancelJob)
 				r.Get("/catalog/libraries", s.handleCatalogLibraries)
 				r.Get("/catalog/items", s.handleCatalogItems)

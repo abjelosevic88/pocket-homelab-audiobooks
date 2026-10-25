@@ -47,6 +47,35 @@ Converted (HLS) playback writes its segments to `DATA_DIR/cache/hls`, never to
 listeners and `HLS_SHARE_ENCODERS` (default 2) those of public shares, which
 have their own pool so they cannot starve the owner.
 
+### Automatic scans
+
+Each library (or all of them at once, from **All libraries** at the top of
+Settings → Libraries) can check for file changes every 15 or 30 minutes, every
+1, 3, 6 or 12 hours, once a day, or daily at a set time. Scans can also be
+limited to a window such as 01:00–06:00; a window may run past midnight
+(22:00–06:00). Window times use the server's time zone (`TZ`; the image ships
+`tzdata`), are evaluated as wall-clock times, and survive daylight-saving
+changes: a window that starts in the skipped hour still opens once, and the
+repeated autumn hour never scans twice.
+
+- An interval inside a window starts scans only while the window is open; a
+  slot that falls outside moves to the next opening.
+- "Once a day" with a window (and "Daily at HH:MM", stored as a one-hour window
+  opening at that time) scans once per window, as soon as it opens, so it does
+  not drift. If the server is busy or down at that moment it catches up later
+  in the same window, never after it.
+- The scheduler checks once a minute. It skips archived libraries and waits,
+  without using up the slot, while a scan of that library is already running or
+  a quick match / author match job for it (or for all libraries) is in
+  progress, so automatic scans never compete with an editing job for the
+  catalog. Only one scan per library can run at a time in any case.
+- The library settings show the next scan the server has computed and the last
+  automatic and last manual scan with their added / updated / missing /
+  quarantined counts.
+
+The API still accepts any interval from 60 to 86400 seconds; values stored by
+older versions (every minute, every 10 minutes) keep working.
+
 `MEDIA_BACKEND=audiobookshelf` retains the historical gateway for migration
 rollback. Only that mode uses `AUDIOBOOKSHELF_URL`, `AUDIOBOOKSHELF_PUBLIC_URL`,
 `AUDIOBOOKSHELF_TOKEN` or `AUDIOBOOKSHELF_USER`/`AUDIOBOOKSHELF_PASSWORD`, and

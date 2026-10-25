@@ -147,10 +147,11 @@ refer to folders already mounted into the container.
 
 | Method | Path | Result |
 | --- | --- | --- |
-| GET | `/catalog/manage` | Libraries, scan permissions, watch settings and recent scan jobs |
+| GET | `/catalog/manage` | Libraries, scan permissions, watch settings (`watch`, `interval_seconds`, `window_start`, `window_end`, `next_scan_at`, `last_auto_started_at`), recent scan jobs (each with `origin` `manual`/`auto`) and the server `timezone` |
 | POST | `/catalog/libraries` | Create a library with `name`, `media_type`, `path` |
 | POST | `/catalog/libraries/{id}/scan` | Start a background scan; `force:true` reprobes metadata |
-| PUT | `/catalog/libraries/{id}/watch` | Set `enabled` and `interval_seconds` (60–86400) |
+| PUT | `/catalog/libraries/{id}/watch` | Set `enabled`, `interval_seconds` (60–86400) and optional `window_start`/`window_end` (`HH:MM` server time, both or neither, may wrap midnight; different values) |
+| PUT | `/catalog/watch` | Same body; applies it to every library the caller may scan and returns their ids as `libraries` |
 | DELETE | `/catalog/scans/{job}` | Cancel a scan; its catalog transaction remains unapplied |
 | GET, PUT | `/catalog/items/{id}/editor` | Metadata/chapters with `expected_updated_at` conflict protection |
 | POST | `/catalog/items/{id}/cover` | Upload `file` as a JPEG/PNG cover |
