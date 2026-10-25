@@ -166,18 +166,26 @@ Requires metadata editing permission. Providers are tried in match order (Settin
 | --- | --- | --- |
 | GET | `/catalog/metadata/providers` · PUT (admin) | Providers with `kind` (`audible`, `openlibrary`, `google`, `custom`), `region` (Audible), `priority` (match order, lowest first) |
 | GET | `/catalog/metadata/search?provider=&q=&author=&isbn=` | Raw provider results; `provider=audible&asin=` returns one Audnexus detail record |
-| GET | `/catalog/items/{id}/match?provider=&title=&author=` | `{item:{metadata, expected_updated_at, has_cover, duration}, query, provider, candidates:[{id, provider, title, authors, cover, duration, metadata, score:{total, title, author, duration, exact, confident}}], errors}`. Title/author default to the cleaned book title and first author; an ASIN on the book is looked up directly |
+| GET | `/catalog/items/{id}/match?provider=&title=&author=&detail=` | `{item:{metadata, expected_updated_at, has_cover, duration, path, dramatized}, query, provider, candidates:[{id, provider, title, authors, cover, duration, metadata, dramatized, score:{total, title, author, duration, exact, confident, edition}}], errors}`. Title/author default to the cleaned book title and first author; an ASIN on the book is looked up directly. `detail=1…3` enriches that many top candidates with the provider's detail record (narrators, series, runtime) and scores them again. `dramatized` marks full-cast productions; `score.edition` is false when one side is a dramatization and the other a reading |
 | POST | `/catalog/items/{id}/match` | `{expected_updated_at, metadata:{…chosen fields}, cover:"url"}` — applies through the editor (409 when stale); the cover is downloaded and validated before anything changes |
 | POST | `/catalog/items/{id}/quick-match` | `{provider?, override_details, override_cover, update_authors, update_series}` → `{status: matched\|skipped\|low_confidence\|not_found\|failed, fields, cover, match_title, score, exact, message}` |
 | GET | `/catalog/items/{id}/audible-chapters?asin=&region=` | Audible chapter markers via Audnexus, clamped to the book: `{chapters, runtime, duration, difference, mismatch}` (`mismatch` when runtimes differ by more than 2 minutes). Nothing is saved |
 | POST | `/catalog/match-jobs` | Bulk quick match in the background: `{library_id}` or `{ids:[…≤1000]}` plus the quick-match options → `202 {id, total}`; one running job per person (409) |
 | GET | `/catalog/match-jobs?library=` · `/catalog/match-jobs/{job}?status=&offset=&limit=` | Recent jobs with `status`, `done`/`total`, `counts` per result status; one job with per-book `results` |
 | DELETE | `/catalog/match-jobs/{job}` | Cancel a running job (the book in progress is left unchanged), or delete a finished job's report |
+| GET | `/catalog/match-jobs/{job}/review?status=low_confidence\|not_found\|all` | Review queue of a book job's uncertain results (default: both): `{job, entries:[{position, item_id, title, status, message, provider, match_id, match_title, match_author, score, exact, review: ""\|accepted\|skipped, reviewed_at}], counts:{total, reviewed, accepted, skipped, pending}, statuses:{low_confidence, not_found}}` |
+| PUT | `/catalog/match-jobs/{job}/review/{position}` | `{state: accepted\|skipped\|pending}` → `{position, item_id, review, reviewed_at}`; `pending` undoes a decision. Only `low_confidence`/`not_found` results can be reviewed (404 otherwise) |
 
 Quick match applies a result only when it is confident: the same ASIN/ISBN, or title similarity ≥ 0.9 with a matching
 author (≥ 0.8) and, when both runtimes are known, a runtime within about 25%. By default it only fills empty fields and
 adds a missing cover; the options allow replacing details, covers, authors or series. Tags and the explicit flag are never
 changed by quick match because they can affect library access.
+
+The web app's **Review matches** page (`/review/{job}`, linked from the quick match report and the library toolbar) walks
+these results one book at a time. It searches the result's provider again with `detail=3` (Audible requests share the
+~1 request/s limiter; the next book is prefetched), applies an accepted candidate through `POST /catalog/items/{id}/match`
+with the book's `expected_updated_at` (empty fields and a missing cover by default, or replacing when chosen), then records
+the decision with the review endpoint. A dramatization/reading mismatch is shown on the candidate and on the Accept button.
 
 ### Author profiles
 
