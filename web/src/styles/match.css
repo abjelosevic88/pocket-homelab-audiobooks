@@ -32,3 +32,13 @@
 .author-edit-photo img { width: 100%; height: 100%; object-fit: cover; }
 .author-meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 6px; }
 .author-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+
+/* Library tidy-up dialogs */
+.tidy-picks { gap: 6px; }
+.tidy-table-wrap { max-height: min(60vh, 640px); overflow: auto; border: 1px solid var(--hairline); border-radius: 10px; }
+.tidy-table td { vertical-align: top; }
+.tidy-table tr.on td { background: var(--accent-soft); }
+.tidy-path { display: block; max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tidy-change { line-height: 1.5; }
+.tidy-change s { color: var(--muted); }
+.tidy-thumb { border-radius: 6px; object-fit: cover; flex: none; }

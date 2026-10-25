@@ -16,7 +16,13 @@ type ItemEdit struct {
 // EditMany commits every selected book together. A stale/inaccessible item or
 // invalid field rolls back metadata and any newly created author/series rows.
 func (c *Catalog) EditMany(ctx context.Context, uid int64, edits []ItemEdit) error {
-	if len(edits) == 0 || len(edits) > 100 {
+	return c.editMany(ctx, uid, edits, 100, true)
+}
+
+// editMany is EditMany with a size limit; record marks changed fields as set
+// by a person (library tidy-up applies its own proposals without it).
+func (c *Catalog) editMany(ctx context.Context, uid int64, edits []ItemEdit, limit int, record bool) error {
+	if len(edits) == 0 || len(edits) > limit {
 		return ErrInvalid
 	}
 	a, err := c.Account(ctx, uid)
@@ -96,8 +102,14 @@ func (c *Catalog) EditMany(ctx context.Context, uid int64, edits []ItemEdit) err
 			}
 		}
 		edit.Metadata = fields
+		before := tidyFields(it)
 		if err = editItem(ctx, tx, a, it, edit.EditOptions); err != nil {
 			return err
+		}
+		if record {
+			if err = recordFieldEdits(ctx, tx, it.ID, before); err != nil {
+				return err
+			}
 		}
 	}
 	return tx.Commit()

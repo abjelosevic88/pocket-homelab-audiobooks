@@ -3,6 +3,7 @@ import {BulkBookEditor} from '../components/BulkBookEditor'
 import {QuickMatchDialog} from '../components/QuickMatchDialog'
 import { ReviewMatchesButton } from '../components/ReviewMatchesButton'
 import { AuthorMatchAllDialog } from '../components/AuthorDialogs'
+import { FindCoversDialog, TidyTitlesDialog } from '../components/TidyDialogs'
 import {useApp} from '../lib/app-context'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { NavLink, useSearchParams } from 'react-router-dom'
@@ -10,11 +11,12 @@ import { api, ApiError } from '../lib/api'
 import { useApi } from '../lib/use'
 import type { AuthorCard, Book, Library as LibraryT, SeriesCard } from '../lib/types'
 import { V1 } from '../lib/books'
+import { onBookFinished } from '../lib/live-progress'
 import { Icon } from '../components/icons'
 import { AuthorTile, BookCard, NotConnected, SeriesTile } from '../components/cards'
 import { Select } from '../components/Select'
 import { UploadBook } from '../components/UploadBook'
-import { Empty, Loading, PageHeader, Segmented, errMsg, useDebounce } from '../components/ui'
+import { Empty, Loading, MenuButton, PageHeader, Segmented, errMsg, useDebounce } from '../components/ui'
 
 const SORTS = [
   { value: 'added', label: 'Recently added' }, { value: 'title', label: 'Title' }, { value: 'author', label: 'Author' }, { value: 'year', label: 'Published' },
@@ -99,12 +101,26 @@ function usePaged<T>(url: (page: number) => string, key: string) {
     io.observe(el)
     return () => io.disconnect()
   }) // eslint-disable-line react-hooks/exhaustive-deps
-  return { items, total, err, busy, more }
+  /** Reloads the pages already shown, in place (no flash, scroll kept). */
+  const refresh = async () => {
+    const k = key
+    try {
+      const all: T[] = []
+      let t = total
+      for (let p = 0; p <= page.current; p++) {
+        const r = await api.get<{ items: T[]; total: number }>(url(p))
+        all.push(...r.items); t = r.total
+      }
+      if (live.current === k) { setItems(all); setTotal(t) }
+    } catch { /* the next event or a manual refresh tries again */ }
+  }
+  return { items, total, err, busy, more, refresh }
 }
 
 function Books({ lib }: { lib: string }) {
   const {settings}=useApp()
   const [selecting,setSelecting]=useState(false),[selected,setSelected]=useState<string[]>([]),[editing,setEditing]=useState(false),[matching,setMatching]=useState<string[]|null>(null),[revision,setRevision]=useState(0)
+  const [tidy, setTidy] = useState<'' | 'titles' | 'covers'>('')
 
   const [sp, setSp] = useSearchParams()
   const sort = sp.get('sort') || 'added'
@@ -133,6 +149,7 @@ function Books({ lib }: { lib: string }) {
         {selecting&&<><button className="btn" onClick={()=>setSelected(items.slice(0,100).map(b=>b.id))}>Select visible books</button><button className="btn primary" disabled={!selected.length} onClick={()=>setEditing(true)}>Edit selected ({selected.length})</button></>}
         {settings?.backend==='native'&&<button className="btn" disabled={selecting&&!selected.length} onClick={()=>setMatching(selecting?selected:[])}>{selecting?`Quick match selected (${selected.length})`:'Quick match'}</button>}
         {settings?.backend==='native'&&!selecting&&<ReviewMatchesButton library={lib} revision={revision}/>}
+        {settings?.backend==='native'&&!selecting&&<MenuButton className="btn" label="Tidy up the library" items={[{ label: 'Tidy titles & series…', icon: 'wand', onSelect: () => setTidy('titles') }, { label: 'Find missing covers…', icon: 'book-open', onSelect: () => setTidy('covers') }]}><Icon name="sparkles" size={15} />Tidy up</MenuButton>}
         <span className="spacer" />
         <span className="muted small">{total >= 0 ? `${total.toLocaleString()} ${total === 1 ? 'book' : 'books'}` : ''}</span>
         <Select ariaLabel="Sort" value={sort} onChange={v => set('sort', v)} options={SORTS} />
@@ -142,6 +159,8 @@ function Books({ lib }: { lib: string }) {
         <div className="grid-covers">{items.map(b => selecting?<div key={b.id}><label><input type="checkbox" aria-label={`Select ${b.title}`} disabled={selected.length>=100&&!selected.includes(b.id)} checked={selected.includes(b.id)} onChange={e=>setSelected(v=>e.target.checked?[...v,b.id]:v.filter(id=>id!==b.id))}/> Select</label><BookCard b={b}/></div>:<BookCard key={b.id} b={b} />)}</div>
       )}
       {matching&&<QuickMatchDialog library={lib} ids={matching} onClose={()=>setMatching(null)} onDone={()=>setRevision(n=>n+1)}/>}
+      {tidy==='titles'&&<TidyTitlesDialog library={lib} onClose={()=>setTidy('')} onDone={()=>setRevision(n=>n+1)}/>}
+      {tidy==='covers'&&<FindCoversDialog library={lib} onClose={()=>setTidy('')} onDone={()=>setRevision(n=>n+1)}/>}
       {editing&&<BulkBookEditor ids={selected} onClose={()=>setEditing(false)} onSaved={()=>{setEditing(false);setSelecting(false);setRevision(n=>n+1)}}/>}
       <div ref={more} className="more-sentinel">{busy && <Loading label="" />}</div>
     </>
@@ -150,7 +169,15 @@ function Books({ lib }: { lib: string }) {
 
 function Series({ lib }: { lib: string }) {
   const [sort, setSort] = useState(() => localStorage.getItem('pab-series-sort') || 'name')
-  const { items, total, err, busy, more } = usePaged<SeriesCard>(page => `${V1}/series?${new URLSearchParams({ library: lib, sort, desc: sort === 'name' ? '' : '1', page: String(page), limit: '48' })}`, `${lib}|${sort}`)
+  const { items, total, err, busy, more, refresh } = usePaged<SeriesCard>(page => `${V1}/series?${new URLSearchParams({ library: lib, sort, desc: sort === 'name' ? '' : '1', page: String(page), limit: '48' })}`, `${lib}|${sort}`)
+  // Finished counts and "all finished" badges follow listening on any device.
+  const refreshLater = useRef(refresh)
+  refreshLater.current = refresh
+  useEffect(() => {
+    let t: number | undefined
+    const off = onBookFinished(() => { clearTimeout(t); t = window.setTimeout(() => void refreshLater.current(), 1500) })
+    return () => { off(); clearTimeout(t) }
+  }, [])
   if (err?.nc) return <NotConnected message={err.msg} />
   return (
     <>

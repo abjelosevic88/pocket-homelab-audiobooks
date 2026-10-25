@@ -5,6 +5,7 @@ import type { AuthorCard, Book, SeriesCard } from '../lib/types'
 import { cover, hours, hue, left } from '../lib/books'
 import { usePlayer } from '../lib/player'
 import { useApp } from '../lib/app-context'
+import { useLiveBook } from '../lib/live-progress'
 import { Icon } from './icons'
 
 /** A cover that fades in, with a coloured placeholder (the title) until it loads or when there is none. */
@@ -26,7 +27,8 @@ export function Progress({ value, className = '' }: { value: number; className?:
 }
 
 /** A square cover linking to the book; play on hover, progress along the bottom. */
-export function BookCard({ b, sub }: { b: Book; sub?: React.ReactNode }) {
+export function BookCard({ b: loaded, sub }: { b: Book; sub?: React.ReactNode }) {
+  const b = useLiveBook(loaded)
   const p = usePlayer()
   const { settings } = useApp()
   const started = b.current_time > 0 && !b.finished
@@ -116,7 +118,8 @@ export function AuthorTile({ a }: { a: AuthorCard }) {
 }
 
 /** A row in a list of books (series page, up next, author page). */
-export function BookRow({ b, n, actions }: { b: Book; n?: React.ReactNode; actions?: React.ReactNode }) {
+export function BookRow({ b: loaded, n, actions }: { b: Book; n?: React.ReactNode; actions?: React.ReactNode }) {
+  const b = useLiveBook(loaded)
   const p = usePlayer()
   const playingThis = p.isCurrent(b.id) && p.playing
   return (
