@@ -86,8 +86,12 @@ Audiobookshelf app).
 
 ## Everything else
 
-Sign-in (`/auth/*`), people (`/users`), personal tokens (`/tokens`), settings (`/settings`), `GET /backup` (admins),
-`GET /export.json` and `POST /import` (your own history, finished books and Up next), `/healthz`, `/readyz`, `/metrics`.
+Sign-in (`/auth/*`), people (`/users`), personal tokens (`/tokens`), settings (`/settings`), `POST /backup` (admins;
+`GET` also works with a bearer token or from the app's own pages, keeping the newest five), `GET /export.json` and
+`POST /import` (your own history, finished books and Up next), `/healthz`, `/readyz`, `/metrics` (off by default).
+
+Browser requests that change something (POST/PUT/PATCH/DELETE without a bearer token or `X-API-Key`) must come
+from this app's own origin (`Origin`/`Referer` matching the host or `BASE_URL`); other sites get `403`.
 
 ## Pocket Homelab / Audiobookshelf gateway
 

@@ -20,12 +20,11 @@ import (
 // Router builds the chi router.
 func (s *Server) Router() http.Handler {
 	r := chi.NewRouter()
-	if s.cfg.TrustProxy {
-		r.Use(middleware.RealIP)
-	}
+	r.Use(s.realIP)
 	r.Use(middleware.RequestID)
 	r.Use(s.logging)
 	r.Use(middleware.Recoverer)
+	r.Use(s.sameOrigin)
 
 	r.Get("/share-player.js", s.nativeShareScript)
 	r.Get("/share/{slug}", s.nativePublicShare)
@@ -172,6 +171,7 @@ func (s *Server) Router() http.Handler {
 				r.Delete("/tokens/{id}", s.handleDeleteToken)
 
 				r.Get("/backup", s.handleBackup)
+				r.Post("/backup", s.handleBackup)
 				r.Get("/export.json", s.handleExportJSON)
 				r.Post("/import", s.handleImportJSON)
 			})
@@ -307,6 +307,10 @@ func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
+	if !s.metricsAllowed(r) {
+		writeErr(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
 	ctx := r.Context()
 	counts := s.store.Counts(ctx)
 	w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")

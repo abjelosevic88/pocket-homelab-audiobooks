@@ -77,7 +77,29 @@ func (s *Server) handleABSPrefixed(w http.ResponseWriter, r *http.Request) {
 	s.mux.ServeHTTP(w, r2)
 }
 
-// gwLogin signs an app in: the email (or name) and an app password (pab_…) or
+// gwPasswordTokenName starts the name of every token an app got by signing in
+// with the account password; a password change revokes them all.
+const gwPasswordTokenName = "Audiobookshelf app (signed in with password)"
+
+// gwPasswordTokenFor names the token of the app and device signing in (its
+// User-Agent), so repeated sign-ins rotate one token instead of piling up.
+func gwPasswordTokenFor(r *http.Request) string {
+	ua := strings.Map(func(c rune) rune {
+		if c < 0x20 || c == 0x7f {
+			return -1
+		}
+		return c
+	}, strings.TrimSpace(r.Header.Get("User-Agent")))
+	if len(ua) > 80 {
+		ua = strings.ToValidUTF8(ua[:80], "")
+	}
+	if ua == "" {
+		return gwPasswordTokenName
+	}
+	return gwPasswordTokenName + " · " + ua
+}
+
+// gwLogin signs an app in:the email (or name) and an app password (pab_…) or
 // the Pocket Audiobooks password, which gets the app its own token.
 func (s *Server) gwLogin(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -107,13 +129,25 @@ func (s *Server) gwLogin(w http.ResponseWriter, r *http.Request) {
 		}
 		tok = in.Password
 	} else {
-		cand, err := s.store.GetUserByEmail(ctx, strings.ToLower(in.Username))
-		if err != nil || cand.PasswordHash == "" || bcrypt.CompareHashAndPassword([]byte(cand.PasswordHash), []byte(in.Password)) != nil {
+		ok, limited := s.passwordAttempt(r, func() bool {
+			cand, err := s.store.GetUserByEmail(ctx, strings.ToLower(in.Username))
+			if err != nil || cand.PasswordHash == "" || bcrypt.CompareHashAndPassword([]byte(cand.PasswordHash), []byte(in.Password)) != nil {
+				return false
+			}
+			u = cand
+			return true
+		})
+		if limited {
+			w.Header().Set("Retry-After", "60")
+			gwError(w, http.StatusTooManyRequests, "Too many sign-in attempts")
+			return
+		}
+		if !ok {
 			fail()
 			return
 		}
-		u = cand
-		plain, _, err := s.store.CreateAPIToken(ctx, u.ID, "Audiobookshelf app (signed in with password)")
+		// One token per app and device: signing in again replaces it.
+		plain, _, err := s.store.ReplaceAPIToken(ctx, u.ID, gwPasswordTokenFor(r))
 		if err != nil {
 			s.fail(w, err, "app token")
 			return

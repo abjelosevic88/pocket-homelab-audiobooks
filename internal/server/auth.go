@@ -230,8 +230,18 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "invalid json")
 		return
 	}
-	u, err := s.store.GetUserByEmail(r.Context(), strings.TrimSpace(strings.ToLower(in.Email)))
-	if err != nil || u.PasswordHash == "" || bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(in.Password)) != nil {
+	var u *store.User
+	ok, limited := s.passwordAttempt(r, func() bool {
+		var err error
+		u, err = s.store.GetUserByEmail(r.Context(), strings.TrimSpace(strings.ToLower(in.Email)))
+		return err == nil && u.PasswordHash != "" && bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(in.Password)) == nil
+	})
+	if limited {
+		w.Header().Set("Retry-After", "60")
+		writeErr(w, http.StatusTooManyRequests, "too many sign-in attempts; try again in a minute")
+		return
+	}
+	if !ok {
 		time.Sleep(300 * time.Millisecond)
 		writeErr(w, http.StatusUnauthorized, "invalid email or password")
 		return
@@ -272,11 +282,28 @@ func (s *Server) handleUpdateMe(w http.ResponseWriter, r *http.Request) {
 	if in.Name != "" {
 		u.Name = in.Name
 	}
-	if in.Email != "" {
-		u.Email = strings.ToLower(strings.TrimSpace(in.Email))
+	currentOK := func() bool {
+		return u.PasswordHash != "" && bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(in.CurrentPassword)) == nil
 	}
+	// The email is how single sign-on finds an account, so changing it is as
+	// sensitive as the password: a hijacked session must not be able to point
+	// the account at an address its holder signs in with.
+	if email := strings.ToLower(strings.TrimSpace(in.Email)); email != "" && email != u.Email {
+		switch {
+		case u.PasswordHash != "":
+			if !currentOK() {
+				writeErr(w, http.StatusBadRequest, "enter your current password to change your email")
+				return
+			}
+		case s.cfg.AuthMode != "none":
+			writeErr(w, http.StatusBadRequest, "your email comes from your sign-in provider; change it there")
+			return
+		}
+		u.Email = email
+	}
+	passwordChanged := false
 	if in.NewPassword != "" {
-		if u.PasswordHash != "" && bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(in.CurrentPassword)) != nil {
+		if u.PasswordHash != "" && !currentOK() {
 			writeErr(w, http.StatusBadRequest, "current password is incorrect")
 			return
 		}
@@ -286,12 +313,34 @@ func (s *Server) handleUpdateMe(w http.ResponseWriter, r *http.Request) {
 		}
 		h, _ := bcrypt.GenerateFromPassword([]byte(in.NewPassword), bcrypt.DefaultCost)
 		u.PasswordHash = string(h)
+		passwordChanged = true
 	}
 	if err := s.store.UpdateUser(r.Context(), u); err != nil {
 		s.fail(w, err, "update user")
 		return
 	}
+	if passwordChanged {
+		keep := ""
+		if c, err := r.Cookie(sessionCookie); err == nil {
+			keep = c.Value
+		}
+		if err := s.revokeSignIns(r.Context(), u.ID, keep); err != nil {
+			s.fail(w, err, "sign out other devices")
+			return
+		}
+	}
 	writeJSON(w, http.StatusOK, u)
+}
+
+// revokeSignIns ends what a password unlocked: every web session except keep,
+// and the tokens Audiobookshelf apps got by signing in with the password.
+// Personal tokens (Homepage, scripts, the iPhone app) stay until revoked in
+// Settings.
+func (s *Server) revokeSignIns(ctx context.Context, uid int64, keep string) error {
+	if err := s.store.DeleteUserSessions(ctx, uid, keep); err != nil {
+		return err
+	}
+	return s.store.DeleteAPITokensNamed(ctx, uid, gwPasswordTokenName)
 }
 
 // ---- users ----
@@ -406,6 +455,16 @@ func (s *Server) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 	if err := s.store.UpdateUser(r.Context(), u); err != nil {
 		s.fail(w, err, "update user")
 		return
+	}
+	if in.Password != "" {
+		keep := ""
+		if c, err := r.Cookie(sessionCookie); err == nil && u.ID == userFrom(r.Context()).ID {
+			keep = c.Value
+		}
+		if err := s.revokeSignIns(r.Context(), u.ID, keep); err != nil {
+			s.fail(w, err, "sign out devices")
+			return
+		}
 	}
 	writeJSON(w, http.StatusOK, u)
 }

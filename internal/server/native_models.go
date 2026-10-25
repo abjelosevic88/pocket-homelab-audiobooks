@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/abjelosevic88/pocket-homelab-audiobooks/internal/abs"
 	"github.com/abjelosevic88/pocket-homelab-audiobooks/internal/library"
 	"github.com/abjelosevic88/pocket-homelab-audiobooks/internal/store"
 )
@@ -415,13 +414,6 @@ func (s *Server) nativeGroups(ctx context.Context, items []nativeObject, key str
 	}
 	sort.Slice(out, func(i, j int) bool { return nativeString(out[i]["name"]) < nativeString(out[j]["name"]) })
 	return out
-}
-
-// abs types remain the public compatibility contract, not the storage engine.
-func nativeDecodeItem(it nativeObject) (abs.Item, error) {
-	var out abs.Item
-	err := json.Unmarshal(nativeJSON(it), &out)
-	return out, err
 }
 
 func nativeMapJSON(v any) nativeObject {

@@ -57,6 +57,7 @@ type Server struct {
 	nativeToolsMu       sync.Mutex
 	nativeToolsCancel   map[string]context.CancelFunc
 	nativeShareAttempts shareAttempts
+	loginAttempts       shareAttempts // password sign-in per client address
 	nativeScanMu        sync.Mutex
 	nativeScanCancel    map[string]context.CancelFunc
 	nativeFetchHTTP     *http.Client

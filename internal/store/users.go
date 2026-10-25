@@ -150,16 +150,53 @@ func (s *Store) CreateAPIToken(ctx context.Context, userID int64, name string) (
 	return plain, &APIToken{ID: id, UserID: userID, Name: name, Prefix: prefix, CreatedAt: Now()}, nil
 }
 
+// ReplaceAPIToken revokes the person's tokens with exactly this name and
+// creates a fresh one: one token per signed-in device instead of a new one at
+// every sign-in.
+func (s *Store) ReplaceAPIToken(ctx context.Context, userID int64, name string) (string, *APIToken, error) {
+	if _, err := s.DB.ExecContext(ctx, `DELETE FROM api_tokens WHERE user_id = ? AND name = ?`, userID, name); err != nil {
+		return "", nil, err
+	}
+	return s.CreateAPIToken(ctx, userID, name)
+}
+
+// DeleteAPITokensNamed revokes the person's tokens whose name starts with
+// prefix (tokens the app minted itself, never personal ones by other names).
+func (s *Store) DeleteAPITokensNamed(ctx context.Context, userID int64, prefix string) error {
+	_, err := s.DB.ExecContext(ctx, `DELETE FROM api_tokens WHERE user_id = ? AND substr(name, 1, ?) = ?`, userID, len(prefix), prefix)
+	return err
+}
+
+// DeleteUserSessions signs the person out everywhere except the session keep
+// (empty: everywhere).
+func (s *Store) DeleteUserSessions(ctx context.Context, userID int64, keep string) error {
+	_, err := s.DB.ExecContext(ctx, `DELETE FROM sessions WHERE user_id = ? AND id <> ?`, userID, HashToken(keep))
+	return err
+}
+
+// tokenTouchEvery limits how often a token's last-used time is written: a
+// player authenticates every HLS segment and the pool holds one connection.
+const tokenTouchEvery = time.Minute
+
 // GetUserByAPIToken resolves a bearer token.
 func (s *Store) GetUserByAPIToken(ctx context.Context, token string) (*User, error) {
 	h := HashToken(token)
-	u, err := scanUser(s.DB.QueryRowContext(ctx, `SELECT u.id, u.email, u.name, u.password_hash, u.role, u.created_at
-		FROM api_tokens t JOIN users u ON u.id = t.user_id WHERE t.token_hash = ?`, h))
+	var u User
+	var last *string
+	err := s.DB.QueryRowContext(ctx, `SELECT u.id, u.email, u.name, u.password_hash, u.role, u.created_at, t.last_used_at
+		FROM api_tokens t JOIN users u ON u.id = t.user_id WHERE t.token_hash = ?`, h).Scan(&u.ID, &u.Email, &u.Name, &u.PasswordHash, &u.Role, &u.CreatedAt, &last)
 	if err != nil {
-		return nil, err
+		return nil, notFound(err)
 	}
-	_, _ = s.DB.ExecContext(ctx, `UPDATE api_tokens SET last_used_at = ? WHERE token_hash = ?`, Now(), h)
-	return u, nil
+	if last == nil || tokenStale(*last, time.Now()) {
+		_, _ = s.DB.ExecContext(ctx, `UPDATE api_tokens SET last_used_at = ? WHERE token_hash = ?`, Now(), h)
+	}
+	return &u, nil
+}
+
+func tokenStale(last string, now time.Time) bool {
+	t, err := time.Parse(time.RFC3339Nano, last)
+	return err != nil || now.Sub(t) >= tokenTouchEvery || t.After(now)
 }
 
 // ListAPITokens lists tokens for a user.

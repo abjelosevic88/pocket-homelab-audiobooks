@@ -197,13 +197,10 @@ no automatic merge or overwrite. For cutover, pause writes on both old services 
 import fresh snapshots; do not promote a rehearsal containing test progress.
 
 The importer preserves library/item metadata, files, author/series relationships,
-podcast episodes, collections/playlists, accounts/permissions, progress, bookmarks
-and history. Importing entity data does not implement its management features.
-Podcast subscription calendars, timezone, retention/download limits and last successful checks
-are imported into native settings. Use `--schedule-timezone` to identify the source
-server timezone and `--podcast-owner` to select a retained mapped account for global
-subscription jobs. Without a selected owner, settings remain preserved and the
-report lists unassigned subscriptions; no automatic worker runs for them.
+collections/playlists, accounts/permissions, progress, bookmarks and history.
+Importing entity data does not implement its management features. Podcast
+libraries, episodes, subscriptions and their progress are omitted (the app is
+audiobook-only since v1.1).
 
 Devices, shares/feeds, notifications, remaining settings, custom providers and authentication
 material remain in the source snapshot for later migration stages; this command

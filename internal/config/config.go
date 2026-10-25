@@ -6,6 +6,7 @@ package config
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"strconv"
 	"strings"
@@ -23,7 +24,9 @@ type Config struct {
 	LogLevel       string
 	LogFormat      string // text | json
 	TrustProxy     bool
+	TrustedProxies []*net.IPNet // peers whose X-Forwarded-For / X-Real-IP are believed
 	MetricsEnabled bool
+	MetricsToken   string // bearer token for /metrics; without it only admins may read it
 
 	MaxUploadBytes          int64
 	MaxAudiobookUploadBytes int64
@@ -136,7 +139,8 @@ func Load() (*Config, error) {
 		LogLevel:       strings.ToLower(env("LOG_LEVEL", "info")),
 		LogFormat:      strings.ToLower(env("LOG_FORMAT", "text")),
 		TrustProxy:     envBool("TRUST_PROXY", true),
-		MetricsEnabled: envBool("METRICS_ENABLED", true),
+		MetricsEnabled: envBool("METRICS_ENABLED", false),
+		MetricsToken:   env("METRICS_TOKEN", ""),
 
 		MaxUploadBytes:          envInt64("MAX_UPLOAD_BYTES", 20<<20),
 		MaxAudiobookUploadBytes: envInt64("MAX_AUDIOBOOK_UPLOAD_BYTES", 10<<30),
@@ -178,6 +182,10 @@ func Load() (*Config, error) {
 	if c.CoreAppURL == "" {
 		c.CoreAppURL = c.BaseURL
 	}
+	var err error
+	if c.TrustedProxies, err = ParseCIDRs(env("TRUSTED_PROXIES", DefaultTrustedProxies)); err != nil {
+		return nil, fmt.Errorf("TRUSTED_PROXIES: %w", err)
+	}
 	if c.Backend != "native" && c.Backend != "audiobookshelf" {
 		return nil, fmt.Errorf("MEDIA_BACKEND must be native or audiobookshelf")
 	}
@@ -199,6 +207,39 @@ func Load() (*Config, error) {
 		c.SyncEvery = time.Minute
 	}
 	return c, nil
+}
+
+// DefaultTrustedProxies are loopback and private networks: a reverse proxy on
+// the same host or docker network. Public peers are never believed.
+const DefaultTrustedProxies = "127.0.0.0/8,::1/128,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,fc00::/7"
+
+// ParseCIDRs reads a comma-separated list of CIDRs or bare IPs.
+func ParseCIDRs(list string) ([]*net.IPNet, error) {
+	var out []*net.IPNet
+	for _, v := range strings.Split(list, ",") {
+		v = strings.TrimSpace(v)
+		if v == "" {
+			continue
+		}
+		if !strings.Contains(v, "/") {
+			ip := net.ParseIP(v)
+			if ip == nil {
+				return nil, fmt.Errorf("invalid address %q", v)
+			}
+			bits := 128
+			if ip4 := ip.To4(); ip4 != nil {
+				ip, bits = ip4, 32
+			}
+			out = append(out, &net.IPNet{IP: ip, Mask: net.CIDRMask(bits, bits)})
+			continue
+		}
+		_, n, err := net.ParseCIDR(v)
+		if err != nil {
+			return nil, fmt.Errorf("invalid network %q", v)
+		}
+		out = append(out, n)
+	}
+	return out, nil
 }
 
 // Addr returns host:port.

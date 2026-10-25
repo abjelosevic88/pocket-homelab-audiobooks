@@ -3,9 +3,20 @@ package server
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"net/url"
 	"testing"
+
+	"github.com/abjelosevic88/pocket-homelab-audiobooks/internal/abs"
 )
+
+// nativeDecodeItem checks a native item against the abs types, which remain
+// the public compatibility contract (not the storage engine).
+func nativeDecodeItem(it nativeObject) (abs.Item, error) {
+	var out abs.Item
+	err := json.Unmarshal(nativeJSON(it), &out)
+	return out, err
+}
 
 func TestNativeBrowseStandardFiltersPagingAndStatistics(t *testing.T) {
 	s, h, a, b, tok := nativeHarness(t)
