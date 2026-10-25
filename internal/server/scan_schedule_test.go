@@ -266,4 +266,18 @@ func TestScheduledScanWaitsForBusyLibrary(t *testing.T) {
 	if last != 0 {
 		t.Fatal("skipped scan consumed its slot", last)
 	}
+	// Another library due while this scan runs waits instead of losing its slot.
+	if _, err := s.store.DB.Exec(`INSERT INTO catalog_libraries SELECT 'lib2',name,media_type,display_order+1,document FROM catalog_libraries WHERE id='lib'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.store.DB.Exec(`INSERT INTO catalog_scan_settings(library_id,interval_seconds,enabled,last_started,actor_id) VALUES('lib2',900,1,0,?)`, a.u.ID); err != nil {
+		t.Fatal(err)
+	}
+	if started := s.runDueScans(ctx, time.Now()); len(started) != 0 {
+		t.Fatal("scan started while another library scans", started)
+	}
+	_ = s.store.DB.QueryRow(`SELECT last_started FROM catalog_scan_settings WHERE library_id='lib2'`).Scan(&last)
+	if last != 0 {
+		t.Fatal("waiting library consumed its slot", last)
+	}
 }

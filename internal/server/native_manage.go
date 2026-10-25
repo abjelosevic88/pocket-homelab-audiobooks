@@ -418,6 +418,12 @@ func (s *Server) runDueScans(ctx context.Context, now time.Time) []string {
 	}
 	rows.Close()
 	started := []string{}
+	// Library scans run one at a time server-wide: while any scan runs, due
+	// libraries wait for a later tick instead of losing their slot.
+	var running int
+	if s.store.DB.QueryRowContext(ctx, `SELECT count(*) FROM catalog_scan_runs WHERE status='running'`).Scan(&running) != nil || running > 0 {
+		return started
+	}
 	for _, id := range ids {
 		if ctx.Err() != nil {
 			return started
@@ -430,16 +436,23 @@ func (s *Server) runDueScans(ctx context.Context, now time.Time) []string {
 			s.log.Debug("scheduled native scan waits", "library", id, "busy", busy)
 			continue
 		}
+		var previous int64
+		_ = s.store.DB.QueryRowContext(ctx, `SELECT last_started FROM catalog_scan_settings WHERE library_id=?`, id).Scan(&previous)
 		if _, err = s.store.DB.ExecContext(ctx, `UPDATE catalog_scan_settings SET last_started=? WHERE library_id=?`, now.Unix(), id); err != nil {
 			continue
 		}
 		run, err := s.startNativeScan(row.actor, id, false)
 		if err != nil {
+			// Not started (e.g. another scan or file change holds the lock):
+			// keep the slot so the next tick tries again.
+			_, _ = s.store.DB.ExecContext(ctx, `UPDATE catalog_scan_settings SET last_started=? WHERE library_id=?`, previous, id)
 			s.log.Warn("scheduled native scan did not start", "library", id, "error", err)
 			continue
 		}
 		_, _ = s.store.DB.ExecContext(ctx, `UPDATE catalog_scan_runs SET origin='auto' WHERE id=?`, run)
 		started = append(started, run)
+		// One scan per tick; the rest start once it has finished.
+		break
 	}
 	return started
 }
