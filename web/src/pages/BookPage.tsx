@@ -6,6 +6,7 @@ import {TrackEditor} from '../components/TrackEditor'
 import { ShareDialog } from '../components/ShareDialog'
 import { AddToList } from '../components/AddToList'
 import { BookEditor } from '../components/BookEditor'
+import { MatchDialog } from '../components/MatchDialog'
 import { Link, useParams, useNavigate } from 'react-router-dom'
 import { api, V1 } from '../lib/api'
 import { useApp } from '../lib/app-context'
@@ -30,6 +31,7 @@ export default function BookPage() {
   const [trashing,setTrashing]=useState(false)
   const navigate=useNavigate()
   const [editing, setEditing] = useState(false)
+  const [matching, setMatching] = useState(false)
   const [tracks,setTracks]=useState(false)
  const [tools,setTools]=useState(false)
   const [organizing, setOrganizing] = useState(false)
@@ -70,6 +72,14 @@ export default function BookPage() {
     try { await api.del(`${V1}/books/${encodeURIComponent(b.id)}/bookmarks?time=${m.time}`); setData({ ...data, bookmarks: data.bookmarks.filter(x => x.time !== m.time) }) } catch (e) { toast(errMsg(e), 'err') }
   }
   const playAt = (sec: number) => p.play(b, { at: sec })
+  const quickMatch = async () => {
+    toast('Quick matching…')
+    try {
+      const r = await api.post<{ status: string; message?: string; match_title?: string; fields?: string[]; cover?: boolean }>(`${V1}/catalog/items/${encodeURIComponent(b.id)}/quick-match`, {})
+      if (r.status === 'matched') { await reload(); toast(`Matched ${r.match_title}: ${[...(r.fields || []), ...(r.cover ? ['cover'] : [])].join(', ')}`) }
+      else toast(r.status === 'low_confidence' ? `No confident match (best: ${r.match_title}). Use Match metadata to choose.` : r.message || 'Nothing changed', r.status === 'failed' ? 'err' : undefined)
+    } catch (e) { toast(errMsg(e), 'err') }
+  }
   const menu = (): MenuItem[] => [
     { label: data.up_next ? 'Take off Up next' : 'Add to Up next', icon: 'list-ordered', onSelect: upNext },
     b.finished ? { label: 'Mark as not finished', icon: 'undo', onSelect: () => progress('unfinished') } : { label: 'Mark as finished', icon: 'check-circle', onSelect: () => setConfirm('finished') },
@@ -83,10 +93,12 @@ export default function BookPage() {
     ...(data.can_edit && (b.files||0)>0 ? [{label:'Manage tracks',icon:'list-ordered',onSelect:()=>setTracks(true)}] : []),
     ...(data.backend==='native' && data.can_edit && data.can_download && (b.files||0)>0 ? [{label:'Audio tools',icon:'headphones',onSelect:()=>setTools(true)}] : []),
     ...(data.can_edit ? [{ label: 'Edit book', icon: 'edit', onSelect: () => setEditing(true) }] : []),
+    ...(data.backend === 'native' && data.can_edit ? [{ label: 'Match metadata', icon: 'search', onSelect: () => setMatching(true) }, { label: 'Quick match', icon: 'wand', onSelect: quickMatch }] : []),
     ...(data.open_url ? [{ label: 'Open in Audiobookshelf', icon: 'external', onSelect: () => window.open(data.open_url, '_blank', 'noreferrer') }] : []),
   ]
   return (
     <div className="book-page">
+      {matching && <MatchDialog id={id} onClose={() => setMatching(false)} onSaved={() => void reload()} />}
       {tools&&<MediaTools id={id} onClose={()=>setTools(false)} onSaved={()=>{if(here)p.stop();void reload()}}/>}
       {tracks&&<TrackEditor id={id} onClose={()=>setTracks(false)} onSaved={()=>{if(here)p.stop();setTracks(false);void reload()}}/>}
       {trashing&&<TrashDialog id={id} title={b.title} onClose={()=>setTrashing(false)} onRemoved={()=>{if(here)p.stop();navigate('/trash')}}/>}

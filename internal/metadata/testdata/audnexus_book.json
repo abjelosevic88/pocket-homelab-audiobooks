@@ -1,0 +1,69 @@
+{
+ "asin": "B003ZWFO7E",
+ "authors": [
+  {
+   "asin": "B001IGFHW6",
+   "name": "Brandon Sanderson"
+  }
+ ],
+ "copyright": 2010,
+ "description": "From #1 New York Times bestselling author Brandon Sanderson, The Way of Kings, Book One of the Stormlight Archive begins an incredible new saga of epic proportion. Roshar is a world of stone and storms. Uncanny tempests of incredible power sweep across the rocky terrain so frequently that they...",
+ "formatType": "unabridged",
+ "genres": [
+  {
+   "asin": "18580606011",
+   "name": "Science Fiction & Fantasy",
+   "type": "genre"
+  },
+  {
+   "asin": "18580607011",
+   "name": "Fantasy",
+   "type": "tag"
+  },
+  {
+   "asin": "18580608011",
+   "name": "Action & Adventure",
+   "type": "tag"
+  },
+  {
+   "asin": "18580615011",
+   "name": "Epic",
+   "type": "tag"
+  },
+  {
+   "asin": "18580620011",
+   "name": "Military",
+   "type": "tag"
+  }
+ ],
+ "image": "https://m.media-amazon.com/images/I/91iPex6QO8L.jpg",
+ "isAdult": false,
+ "isbn": "9781427209764",
+ "language": "english",
+ "literatureType": "fiction",
+ "narrators": [
+  {
+   "name": "Michael Kramer"
+  },
+  {
+   "name": "Kate Reading"
+  }
+ ],
+ "publisherName": "Macmillan Audio",
+ "rating": "4.8",
+ "region": "us",
+ "releaseDate": "2010-08-31T00:00:00.000Z",
+ "runtimeLengthMin": 2730,
+ "seriesPrimary": {
+  "asin": "B006K1RP8I",
+  "name": "The Stormlight Archive",
+  "position": "1"
+ },
+ "seriesSecondary": {
+  "asin": "B0DMXTJ8WH",
+  "name": "The Cosmere"
+ },
+ "subtitle": "Book One of the Stormlight Archive",
+ "summary": "<p><b>From #1 <i>New York Times</i> bestselling author Brandon Sanderson, <i>The Way of Kings</i>, Book One of the Stormlight Archive begins an incredible new saga of epic proportion.</b><br /><br />Roshar is a world of stone and storms. Uncanny tempests of incredible power sweep across the rocky terrain so frequently that they have shaped ecology and civilization alike. Animals hide in shells, trees pull in branches, and grass retracts into the soilless ground. Cities are built only where the t</p>",
+ "title": "The Way of Kings"
+}

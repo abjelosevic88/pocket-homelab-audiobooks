@@ -1,0 +1,258 @@
+{
+ "product_filters": [],
+ "products": [
+  {
+   "asin": "B003ZWFO7E",
+   "authors": [
+    {
+     "asin": "B001IGFHW6",
+     "name": "Brandon Sanderson"
+    }
+   ],
+   "category_ladders": [
+    {
+     "ladder": [
+      {
+       "id": "18580606011",
+       "name": "Science Fiction & Fantasy"
+      },
+      {
+       "id": "18580607011",
+       "name": "Fantasy"
+      },
+      {
+       "id": "18580608011",
+       "name": "Action & Adventure"
+      }
+     ],
+     "root": "Genres"
+    },
+    {
+     "ladder": [
+      {
+       "id": "18580606011",
+       "name": "Science Fiction & Fantasy"
+      },
+      {
+       "id": "18580607011",
+       "name": "Fantasy"
+      },
+      {
+       "id": "18580615011",
+       "name": "Epic"
+      }
+     ],
+     "root": "Genres"
+    },
+    {
+     "ladder": [
+      {
+       "id": "18580606011",
+       "name": "Science Fiction & Fantasy"
+      },
+      {
+       "id": "18580607011",
+       "name": "Fantasy"
+      },
+      {
+       "id": "18580620011",
+       "name": "Military"
+      }
+     ],
+     "root": "Genres"
+    }
+   ],
+   "content_delivery_type": "MultiPartBook",
+   "content_type": "Product",
+   "format_type": "unabridged",
+   "has_children": true,
+   "is_adult_product": false,
+   "is_listenable": true,
+   "is_purchasability_suppressed": false,
+   "is_vvab": false,
+   "issue_date": "2010-08-31",
+   "language": "english",
+   "merchandising_summary": "From #1 New York Times bestselling author Brandon Sanderson, The Way of Kings, Book One of the Stormlight Archive begins an incredible new saga of epic proportion. Roshar is a world of stone and storms. Uncanny tempests of incredible power sweep across the rocky terrain so frequently that they...",
+   "narrators": [
+    {
+     "name": "Michael Kramer"
+    },
+    {
+     "name": "Kate Reading"
+    }
+   ],
+   "product_images": {
+    "500": "https://m.media-amazon.com/images/I/51hAwcG3oNL._SL500_.jpg"
+   },
+   "publication_datetime": "2010-08-31T05:00:00Z",
+   "publication_name": "The Stormlight Archive",
+   "publisher_name": "Macmillan Audio",
+   "publisher_summary": "<p><b>From #1 <i>New York Times</i> bestselling author Brandon Sanderson, <i>The Way of Kings</i>, Book One of the Stormlight Archive begins an incredible new saga of epic proportion.</b><br /><br />Roshar is a world of stone and storms. Uncanny tempests of incredible power sweep across the rocky terrain so frequently that they have shaped ecology and civilization alike. Animals hide in shells, tr</p>",
+   "release_date": "2010-08-31",
+   "runtime_length_min": 2730,
+   "series": [
+    {
+     "asin": "B0DMXTJ8WH",
+     "sequence": "",
+     "title": "The Cosmere",
+     "url": "/pd/The-Cosmere-Audiobook/B0DMXTJ8WH"
+    },
+    {
+     "asin": "B006K1RP8I",
+     "sequence": "1",
+     "title": "The Stormlight Archive",
+     "url": "/pd/The-Stormlight-Archive-Audiobook/B006K1RP8I"
+    }
+   ],
+   "subtitle": "Book One of the Stormlight Archive",
+   "title": "The Way of Kings"
+  },
+  {
+   "asin": "B0052EFJLE",
+   "authors": [
+    {
+     "asin": "B001IGFHW6",
+     "name": "Brandon Sanderson"
+    }
+   ],
+   "category_ladders": [
+    {
+     "ladder": [
+      {
+       "id": "18574426011",
+       "name": "Literature & Fiction"
+      },
+      {
+       "id": "18574427011",
+       "name": "Action & Adventure"
+      }
+     ],
+     "root": "Genres"
+    },
+    {
+     "ladder": [
+      {
+       "id": "18574426011",
+       "name": "Literature & Fiction"
+      },
+      {
+       "id": "18574456011",
+       "name": "Genre Fiction"
+      },
+      {
+       "id": "18574461011",
+       "name": "Coming of Age"
+      }
+     ],
+     "root": "Genres"
+    },
+    {
+     "ladder": [
+      {
+       "id": "18574426011",
+       "name": "Literature & Fiction"
+      },
+      {
+       "id": "18574456011",
+       "name": "Genre Fiction"
+      },
+      {
+       "id": "18574472011",
+       "name": "Metaphysical & Visionary"
+      }
+     ],
+     "root": "Genres"
+    },
+    {
+     "ladder": [
+      {
+       "id": "18580606011",
+       "name": "Science Fiction & Fantasy"
+      },
+      {
+       "id": "18580607011",
+       "name": "Fantasy"
+      },
+      {
+       "id": "18580615011",
+       "name": "Epic"
+      }
+     ],
+     "root": "Genres"
+    },
+    {
+     "ladder": [
+      {
+       "id": "18580606011",
+       "name": "Science Fiction & Fantasy"
+      },
+      {
+       "id": "18580607011",
+       "name": "Fantasy"
+      },
+      {
+       "id": "18580618011",
+       "name": "Historical"
+      }
+     ],
+     "root": "Genres"
+    }
+   ],
+   "content_delivery_type": "MultiPartBook",
+   "content_type": "Product",
+   "format_type": "unabridged",
+   "has_children": true,
+   "is_adult_product": false,
+   "is_listenable": true,
+   "is_purchasability_suppressed": false,
+   "is_vvab": false,
+   "issue_date": "2011-05-26",
+   "language": "english",
+   "merchandising_summary": "The groundbreaking first book of an epic series that has changed the face of fantasy. The Way of Kings begins The Stormlight Archive. Speak again the ancient oaths: Life before death. Strength before weakness. Journey before Destination. Return to men the Shards they once bore. The Knights...",
+   "narrators": [
+    {
+     "name": "Kate Reading"
+    },
+    {
+     "name": "Michael Kramer"
+    }
+   ],
+   "product_images": {
+    "500": "https://m.media-amazon.com/images/I/41G5iiCMW+L._SL500_.jpg"
+   },
+   "publication_datetime": "2011-05-26T00:00:00Z",
+   "publication_name": "The Stormlight Archive",
+   "publisher_name": "Gollancz",
+   "publisher_summary": "<b>The groundbreaking first book of an epic series that has changed the face of fantasy. <i>The Way of Kings </i>begins The Stormlight Archive.</b><br /><br /><b>Speak again the ancient oaths:</b><br /><br /><b>Life before death.</b><br /><b>Strength before weakness.</b><br /><b>Journey before Destination.</b><br /><b>Return to men the Shards they once bore.</b><br /><br /><b>The Knights Radiant m</p>",
+   "release_date": "2011-05-26",
+   "runtime_length_min": 2729,
+   "series": [
+    {
+     "asin": "B006K1RP8I",
+     "sequence": "1",
+     "title": "The Stormlight Archive",
+     "url": "/pd/The-Stormlight-Archive-Audiobook/B006K1RP8I"
+    },
+    {
+     "asin": "B0DMXTJ8WH",
+     "sequence": "",
+     "title": "The Cosmere",
+     "url": "/pd/The-Cosmere-Audiobook/B0DMXTJ8WH"
+    }
+   ],
+   "subtitle": "The Stormlight Archive, Book 1",
+   "title": "The Way of Kings"
+  }
+ ],
+ "response_groups": [
+  "product_desc",
+  "always-returned",
+  "product_extended_attrs",
+  "contributors",
+  "series",
+  "media",
+  "category_ladders",
+  "product_attrs"
+ ],
+ "total_results": 2
+}

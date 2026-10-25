@@ -70,6 +70,9 @@ in its own folder; multi-file books and CD/disc subfolders are supported.
   upload limit: 10 GiB, configurable with `MAX_AUDIOBOOK_UPLOAD_BYTES`.
 - Edit metadata, chapters and covers, preview provider matches, make bulk edits,
   reorder/exclude tracks, and export metadata or original-file downloads.
+- Match books against Audible (with Audnexus details and chapters), Open Library,
+  Google Books or a custom provider: pick fields per book, or quick match a whole
+  library in the background (fills empty fields only unless you choose otherwise).
 - Recoverable Trash, application backup/restore, M4B generation and metadata
   embedding. Generated files can be selected for playback while originals stay.
 - Companion EPUB/PDF reading is available alongside your audiobooks. Podcasts

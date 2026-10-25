@@ -51,6 +51,7 @@ export function BookEditor({ id, onClose, onSaved }: { id: string; onClose: () =
         <button type="button" className="btn" onClick={() => set('series', [...form.metadata.series, { name: '', sequence: '' }])}>Add series</button>
       </fieldset>
       <details><summary>Chapters ({form.chapters.length})</summary><p className="muted small">Times are seconds from the beginning of the book.</p>
+        <AudibleChapters id={id} asin={String(form.metadata.asin || '')} onUse={chapters => setForm(f => f && ({ ...f, chapters }))} />
         <div className="stack">{form.chapters.map((chapter, i) => <div className="row wrap" key={i}>
           <input aria-label={`Chapter ${i + 1} title`} value={chapter.title} onChange={e => setForm({ ...form, chapters: form.chapters.map((c, j) => i === j ? { ...c, title: e.target.value } : c) })} />
           {(['start', 'end'] as const).map(key => <input key={key} aria-label={`Chapter ${i + 1} ${key} seconds`} type="number" min={0} step="0.001" value={chapter[key]} onChange={e => setForm({ ...form, chapters: form.chapters.map((c, j) => i === j ? { ...c, [key]: Number(e.target.value) } : c) })} />)}
@@ -60,4 +61,27 @@ export function BookEditor({ id, onClose, onSaved }: { id: string; onClose: () =
       <div className="row"><button type="submit" className="btn primary" disabled={busy}>{busy ? 'Saving…' : 'Save changes'}</button><button type="button" className="btn" onClick={onClose}>Cancel</button></div>
     </form>}
   </Modal>
+}
+
+type AudibleResult = { asin: string; runtime: number; duration: number; difference: number; mismatch: boolean; accurate: boolean; chapters: Chapter[] }
+// Proposes Audible's chapter markers (via Audnexus); nothing is saved until Save changes.
+function AudibleChapters({ id, asin, onUse }: { id: string; asin: string; onUse: (chapters: Chapter[]) => void }) {
+  const [value, setValue] = useState(asin)
+  const [found, setFound] = useState<AudibleResult>()
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  useEffect(() => setValue(asin), [asin])
+  const fetchChapters = async () => {
+    setBusy(true); setError(''); setFound(undefined)
+    try {
+      const r = await api.get<AudibleResult>(`${V1}/catalog/items/${encodeURIComponent(id)}/audible-chapters?asin=${encodeURIComponent(value.trim())}`)
+      if (r.mismatch) setFound(r); else onUse(r.chapters)
+    } catch (e) { setError(errMsg(e)) } finally { setBusy(false) }
+  }
+  const mins = (s: number) => `${Math.round(Math.abs(s) / 60)} min`
+  return <div className="stack">
+    <div className="row wrap"><input aria-label="ASIN for Audible chapters" placeholder="ASIN" value={value} onChange={e => setValue(e.target.value)} /><button type="button" className="btn" disabled={busy || !value.trim()} onClick={fetchChapters}>{busy ? 'Fetching…' : 'Fetch chapters from Audible'}</button></div>
+    {error && <p role="alert" className="callout danger">{error}</p>}
+    {found && <div className="callout warn"><div className="stack"><span>Audible's edition is {mins(found.difference)} {found.difference > 0 ? 'longer' : 'shorter'} than this book ({found.chapters.length} chapters fit). The markers may not line up with your files.</span><div className="row"><button type="button" className="btn" onClick={() => { onUse(found.chapters); setFound(undefined) }}>Use anyway</button><button type="button" className="btn" onClick={() => setFound(undefined)}>Keep current chapters</button></div></div></div>}
+  </div>
 }

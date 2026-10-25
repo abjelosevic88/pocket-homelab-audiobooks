@@ -15,18 +15,25 @@ import (
 	"github.com/abjelosevic88/pocket-homelab-audiobooks/internal/fetch"
 )
 
-type Provider struct{ ID, Kind, URL, Authorization string }
+// Provider is one configured metadata source. Region applies to Audible.
+type Provider struct{ ID, Kind, URL, Authorization, Region string }
 type Candidate struct {
 	ID       string         `json:"id"`
 	Provider string         `json:"provider"`
 	Title    string         `json:"title"`
 	Authors  []string       `json:"authors"`
 	Cover    string         `json:"cover"`
+	Duration float64        `json:"duration,omitempty"` // seconds, when the provider knows the runtime
+	Region   string         `json:"region,omitempty"`
 	Metadata map[string]any `json:"metadata"`
 }
 type Client struct {
 	HTTP      *http.Client
 	UserAgent string
+	// AudibleURL and AudnexusURL replace the public API bases (tests).
+	AudibleURL, AudnexusURL string
+	// Limiter spaces Audible/Audnexus requests; nil uses AudibleLimiter.
+	Limiter *Limiter
 }
 
 func (c Client) json(ctx context.Context, raw, auth string, out any) error {
@@ -58,6 +65,8 @@ func (c Client) Search(ctx context.Context, p Provider, q, author, isbn string) 
 	}
 	out := []Candidate{}
 	switch p.Kind {
+	case "audible":
+		return c.searchAudible(ctx, p, q, author, isbn)
 	case "openlibrary":
 		params := url.Values{"q": {q}, "limit": {"20"}, "fields": {"key,title,author_name,first_publish_year,isbn,cover_i,language,publisher"}}
 		if author != "" {

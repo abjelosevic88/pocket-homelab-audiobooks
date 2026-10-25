@@ -71,7 +71,8 @@ long upload timeouts in the reverse proxy, and free space in the destination lib
 
 ### Native metadata providers
 
-In native mode, Libraries → Metadata providers configures Open Library, Google
+In native mode, Libraries → Metadata providers configures Audible (default, no
+key; details and chapters via [Audnexus](https://audnex.us)), Open Library, Google
 Books (requires your API key), and custom providers using the
 `GET /search?query=…&author=…&isbn=…&mediaType=book` / `{ "matches": […] }` contract.
 Provider credentials are sealed with the app's `secret.key`; include it in backups.
@@ -82,6 +83,14 @@ Outbound metadata/artwork requests permit public HTTP/HTTPS destinations by
 default. For a self-hosted provider, set `NATIVE_FETCH_PRIVATE_HOSTS` to its exact
 hostname (comma-separated for multiple hosts). DNS and each redirect are checked
 at connection time; provider credentials are not forwarded to a different host.
+
+`AUDIBLE_REGION` (default `us`; one of `us ca uk au fr de jp it in es`) selects the
+Audible store when the provider's own region setting is left on Default. Each
+provider has a match order: **Match** (book page) and **Quick match** (book page,
+library toolbar or a selection) try enabled providers from the lowest number up.
+Requests to Audible and Audnexus are spaced about one second apart, shared by all
+users and bulk jobs, so a quick match of 1,500 books takes roughly an hour. Quick
+match fills only empty fields unless its options say otherwise; see [API](api.md#metadata-match).
 
 Provider contracts: [Open Library search](https://openlibrary.org/dev/docs/api/search)
 and [Google Books API](https://developers.google.com/books/docs/v1/using).
