@@ -79,7 +79,7 @@ function summary(job: Job): string {
   if (job.status === 'running') return 'running'
   if (job.status !== 'complete') return job.report.error ? `${job.status}: ${job.report.error}` : job.status
   const r = job.report
-  return [`${r.added} added`, `${r.updated} updated`, `${r.missing} missing`, ...(r.quarantined ? [`${r.quarantined} quarantined`] : [])].join(' · ')
+  return ['complete', `${r.added} added`, `${r.updated} updated`, `${r.missing} missing`, ...(r.quarantined ? [`${r.quarantined} quarantined`] : [])].join(' · ')
 }
 
 /** Shows the latest automatic and manual scan and the server's next run. */
