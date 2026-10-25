@@ -110,9 +110,10 @@ func (c *Client) Send(ctx context.Context, m Message) error {
 		return err
 	}
 	defer res.Body.Close()
+	_, _ = io.Copy(io.Discard, io.LimitReader(res.Body, 64<<10))
 	if res.StatusCode >= 300 {
-		b, _ := io.ReadAll(io.LimitReader(res.Body, 300))
-		return fmt.Errorf("notify HTTP %d: %s", res.StatusCode, strings.TrimSpace(string(b)))
+		// Only the status: the answer of whatever the URL points at is never echoed.
+		return fmt.Errorf("notify HTTP %d", res.StatusCode)
 	}
 	return nil
 }

@@ -71,9 +71,3 @@ func (s *Server) linkUser(ctx context.Context, tok string, r *http.Request) (*st
 }
 
 const linkAppKey ctxKey = 2
-
-// linkApp is the acting app's slug when the request came in on a link token, "" otherwise.
-func linkApp(ctx context.Context) string {
-	a, _ := ctx.Value(linkAppKey).(string)
-	return a
-}

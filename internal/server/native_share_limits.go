@@ -16,6 +16,9 @@ type shareAttempt struct {
 	count int
 }
 
+// shareAttemptsMax bounds the addresses remembered at once.
+const shareAttemptsMax = 4096
+
 func (a *shareAttempts) permit(key string) bool {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -23,17 +26,22 @@ func (a *shareAttempts) permit(key string) bool {
 	if a.entries == nil {
 		a.entries = map[string]shareAttempt{}
 	}
-	if len(a.entries) >= 4096 {
-		for k, v := range a.entries {
-			if now.Sub(v.start) >= time.Minute {
+	v, known := a.entries[key]
+	if !known && len(a.entries) >= shareAttemptsMax {
+		// Full: drop expired windows, then the oldest, so a flood of addresses
+		// costs its own entries rather than locking everyone else out.
+		oldest, oldestAt := "", now
+		for k, e := range a.entries {
+			if now.Sub(e.start) >= time.Minute {
 				delete(a.entries, k)
+			} else if e.start.Before(oldestAt) {
+				oldest, oldestAt = k, e.start
 			}
 		}
-		if len(a.entries) >= 4096 {
-			return false
+		if len(a.entries) >= shareAttemptsMax && oldest != "" {
+			delete(a.entries, oldest)
 		}
 	}
-	v := a.entries[key]
 	if now.Sub(v.start) >= time.Minute {
 		v = shareAttempt{start: now}
 	}

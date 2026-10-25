@@ -334,7 +334,7 @@ function Profile() {
       </div>
       <Section title="You"><div className="stack">
         <Field label="Name"><input value={f.name} onChange={e => setF({ ...f, name: e.target.value })} /></Field>
-        <Field label="Email"><input type="email" value={f.email} onChange={e => setF({ ...f, email: e.target.value })} /></Field>
+        <Field label="Email" help={status?.auth_mode === 'local' && f.email.trim().toLowerCase() !== (user?.email || '') ? 'Enter your current password below to change your email.' : undefined}><input type="email" value={f.email} onChange={e => setF({ ...f, email: e.target.value })} /></Field>
       </div></Section>
       {status?.auth_mode === 'local' && <Section title="Password" sub="Leave empty to keep the current one."><div className="stack">
         <Field label="Current password"><input type="password" value={f.current_password} onChange={e => setF({ ...f, current_password: e.target.value })} autoComplete="current-password" /></Field>

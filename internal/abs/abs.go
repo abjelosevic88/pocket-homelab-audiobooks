@@ -777,12 +777,3 @@ func (c *Client) ListeningSessions(ctx context.Context, page, perPage int) (*Ses
 	var p SessionsPage
 	return &p, c.call(ctx, http.MethodGet, "/api/me/listening-sessions", url.Values{"page": {fmt.Sprint(page)}, "itemsPerPage": {fmt.Sprint(perPage)}}, nil, &p)
 }
-
-// CoverURL is the cover path for a book (proxied by the app).
-func CoverURL(itemID string, width int) (string, url.Values) {
-	q := url.Values{}
-	if width > 0 {
-		q.Set("width", fmt.Sprint(width))
-	}
-	return "/api/items/" + url.PathEscape(itemID) + "/cover", q
-}

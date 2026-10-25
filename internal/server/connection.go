@@ -353,6 +353,11 @@ func countInProgress(me *abs.Me) int {
 func (s *Server) handleConnect(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	u := userFrom(ctx)
+	if s.cfg.Backend == "native" {
+		// The native library has no Audiobookshelf account to connect.
+		writeErr(w, http.StatusNotFound, "not found")
+		return
+	}
 	var in struct {
 		Mode     string `json:"mode"` // key | direct | core | off
 		URL      string `json:"url"`
@@ -377,7 +382,7 @@ func (s *Server) handleConnect(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	case "key":
-		base, custom, ok := s.pickBase(w, in.URL)
+		base, custom, ok := s.pickBase(w, r, in.URL)
 		if !ok {
 			return
 		}
@@ -388,10 +393,12 @@ func (s *Server) handleConnect(w http.ResponseWriter, r *http.Request) {
 		}
 		me, err := s.newABS(base, key).Me(ctx)
 		if err != nil {
+			msg := "could not reach Audiobookshelf at that address"
 			if abs.IsAuth(err) {
-				err = errors.New("Audiobookshelf refused this key: it is wrong, expired or switched off")
+				msg = "Audiobookshelf refused this key: it is wrong, expired or switched off"
 			}
-			writeErr(w, http.StatusBadRequest, err.Error())
+			s.log.Warn("audiobookshelf connect", "err", err)
+			writeErr(w, http.StatusBadRequest, msg)
 			return
 		}
 		sealed, err := s.seal(key)
@@ -406,7 +413,7 @@ func (s *Server) handleConnect(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	case "direct":
-		_, custom, ok := s.pickBase(w, in.URL)
+		_, custom, ok := s.pickBase(w, r, in.URL)
 		if !ok {
 			return
 		}
@@ -417,7 +424,12 @@ func (s *Server) handleConnect(w http.ResponseWriter, r *http.Request) {
 		}
 		res, err := s.newABS(firstNonEmpty(custom, s.cfg.ABSURL), "").Login(ctx, in.Username, in.Password)
 		if err != nil {
-			writeErr(w, http.StatusBadRequest, err.Error())
+			msg := "could not sign in to Audiobookshelf at that address"
+			if abs.IsAuth(err) {
+				msg = "Audiobookshelf refused this username or password"
+			}
+			s.log.Warn("audiobookshelf sign-in", "err", err)
+			writeErr(w, http.StatusBadRequest, msg)
 			return
 		}
 		if err := s.saveSignIn(ctx, u.ID, old, custom, res); err != nil {
@@ -433,9 +445,18 @@ func (s *Server) handleConnect(w http.ResponseWriter, r *http.Request) {
 }
 
 // pickBase is the Audiobookshelf address a sign-in goes to (the box's, or one typed in).
-func (s *Server) pickBase(w http.ResponseWriter, raw string) (base, custom string, ok bool) {
+// Only an admin may point the server at an address of their choosing: anyone
+// else connects to the box's Audiobookshelf (AUDIOBOOKSHELF_URL).
+func (s *Server) pickBase(w http.ResponseWriter, r *http.Request, raw string) (base, custom string, ok bool) {
 	custom = strings.TrimRight(strings.TrimSpace(raw), "/")
+	if custom == s.cfg.ABSURL {
+		custom = ""
+	}
 	if custom != "" {
+		if u := userFrom(r.Context()); u == nil || u.Role != "admin" {
+			writeErr(w, http.StatusForbidden, "only an admin can connect to another Audiobookshelf address")
+			return "", "", false
+		}
 		if err := validServerURL(custom); err != nil {
 			writeErr(w, http.StatusBadRequest, err.Error())
 			return "", "", false

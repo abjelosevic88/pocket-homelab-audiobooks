@@ -14,8 +14,10 @@ Integration values seed the owner's (first admin's) own settings on first start,
 | `DB_PATH` | `$DATA_DIR/pocket-audiobooks.db` | Override the database location |
 | `TZ` | – | Time zone for "today", streaks and the weekly recap |
 | `LOG_LEVEL` / `LOG_FORMAT` | `info` / `text` | `debug`, `warn`, `error`; `json` |
-| `TRUST_PROXY` | `true` | Honour `X-Forwarded-For` |
-| `METRICS_ENABLED` | `true` | Prometheus `/metrics` (row counts only, never content) |
+| `TRUST_PROXY` | `true` | Honour `X-Forwarded-For` / `X-Real-IP`, but only from a peer in `TRUSTED_PROXIES` |
+| `TRUSTED_PROXIES` | loopback + private ranges | Comma-separated CIDRs or IPs of your reverse proxies (`127.0.0.0/8,::1/128,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,fc00::/7`) |
+| `METRICS_ENABLED` | `false` | Prometheus `/metrics` (row counts only, never content); readable by admins or with `METRICS_TOKEN` |
+| `METRICS_TOKEN` | – | Bearer token a scraper sends to `/metrics` |
 | `USER_AGENT` | `PocketAudiobooks/1.0 (+repo URL)` | Sent with outgoing requests |
 
 ## Sign-in

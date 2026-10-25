@@ -223,13 +223,6 @@ func boolInt(b bool) int {
 	return 0
 }
 
-func nullI(i *int64) any {
-	if i == nil || *i == 0 {
-		return nil
-	}
-	return *i
-}
-
 // ---- generic cache ----
 
 // CacheGet returns a cached value and when it was fetched.

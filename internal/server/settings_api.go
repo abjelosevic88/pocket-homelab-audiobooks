@@ -2,12 +2,15 @@ package server
 
 import (
 	"context"
+	"errors"
 	"github.com/abjelosevic88/pocket-homelab-audiobooks/internal/backup"
 	"github.com/abjelosevic88/pocket-homelab-audiobooks/internal/library"
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
+	"sort"
 	"strings"
 	"time"
 
@@ -16,16 +19,6 @@ import (
 )
 
 // ---- settings ----
-
-func mask(s string) string {
-	if s == "" {
-		return ""
-	}
-	if len(s) <= 8 {
-		return "••••"
-	}
-	return s[:4] + "••••" + s[len(s)-4:]
-}
 
 // publicSettings is what one person sees: their settings with secrets masked.
 func (s *Server) publicSettings(ctx context.Context, u *store.User, st store.Settings) map[string]any {
@@ -140,7 +133,14 @@ func (s *Server) handleIntegrationTest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	u := userFrom(r.Context())
+	admin := u.Role == "admin"
 	st, _ := s.store.GetSettings(r.Context(), u.ID)
+	if typed := strings.TrimRight(strings.TrimSpace(in.URL), "/"); !admin && typed != "" && typed != strings.TrimRight(strings.TrimSpace(st.NotifyURL), "/") {
+		// A typed-in address makes the server call it and report back: admins only.
+		// Everyone else tests the address saved in their settings.
+		writeErr(w, http.StatusForbidden, "save the address first, then test it")
+		return
+	}
 	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
 	defer cancel()
 	urlOr := func(saved string) string {
@@ -165,7 +165,12 @@ func (s *Server) handleIntegrationTest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": err.Error()})
+		s.log.Info("notification test failed", "user", u.Email, "err", err)
+		msg := "the notification could not be delivered"
+		if admin {
+			msg = err.Error() // status or connection error only, never the answer's body
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": msg})
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "message": msg})
@@ -189,6 +194,11 @@ func (s *Server) handleSystemInfo(w http.ResponseWriter, r *http.Request) {
 // admin only (everyone can export their own data as JSON).
 func (s *Server) handleBackup(w http.ResponseWriter, r *http.Request) {
 	if !s.requireAdmin(w, r) {
+		return
+	}
+	if r.Method == http.MethodGet && !tokenAuthenticated(r) && !sameOriginNavigation(r) {
+		// Writing a backup is not something a link on another site may trigger.
+		writeErr(w, http.StatusForbidden, "cross-site request refused")
 		return
 	}
 	format := r.URL.Query().Get("format")
@@ -216,10 +226,43 @@ func (s *Server) handleBackup(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err, "backup")
 		return
 	}
+	if err := pruneDownloadBackups(dir, keepDownloadBackups); err != nil {
+		s.log.Warn("prune old backups", "err", err)
+	}
 	w.Header().Set("Cache-Control", "private, no-store")
 	w.Header().Set("Content-Type", mime)
 	w.Header().Set("Content-Disposition", `attachment; filename="`+name+`"`)
 	http.ServeFile(w, r, dst)
+}
+
+// keepDownloadBackups is how many downloaded backups stay in data/backups.
+const keepDownloadBackups = 5
+
+// downloadBackupName matches only the files handleBackup writes.
+var downloadBackupName = regexp.MustCompile(`^pocket-audiobooks-\d{8}T\d{6}\.\d{9}Z\.(db|tar\.gz)$`)
+
+// pruneDownloadBackups deletes all but the newest keep downloaded backups.
+// Anything else in the directory is left alone.
+func pruneDownloadBackups(dir string, keep int) error {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return err
+	}
+	names := []string{}
+	for _, e := range entries {
+		if e.Type().IsRegular() && downloadBackupName.MatchString(e.Name()) {
+			names = append(names, e.Name())
+		}
+	}
+	// The UTC timestamp right after the fixed prefix sorts chronologically.
+	sort.Slice(names, func(i, j int) bool { return names[i] > names[j] })
+	var errs []error
+	for _, n := range names[min(keep, len(names)):] {
+		if err := os.Remove(filepath.Join(dir, n)); err != nil && !os.IsNotExist(err) {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
 }
 
 // exportDoc is the JSON export of one person's own data: listening history,

@@ -20,26 +20,23 @@ import (
 )
 
 type ImportOptions struct {
-	Source           string
-	Mounts           map[string]string
-	Users            map[string]int64 // source account ID -> existing Pocket user ID; never guessed
-	ExcludeAccounts  []string         // explicitly discarded source accounts; never inferred from missing mappings
-	PodcastOwner     string           // explicitly selected retained source account for global subscription jobs
-	ScheduleTimezone string           // source server IANA timezone; never inferred from destination timezone
-	Apply            bool
+	Source          string
+	Mounts          map[string]string
+	Users           map[string]int64 // source account ID -> existing Pocket user ID; never guessed
+	ExcludeAccounts []string         // explicitly discarded source accounts; never inferred from missing mappings
+	Apply           bool
 }
 type ImportReport struct {
-	Format                  int            `json:"format"`
-	Applied                 bool           `json:"applied"`
-	Fingerprint             string         `json:"fingerprint"`
-	Counts                  map[string]int `json:"counts"`
-	ExcludedRows            map[string]int `json:"excluded_rows,omitempty"`
-	UnassignedSubscriptions int            `json:"unassigned_subscriptions"`
-	UnmappedAccounts        int            `json:"unmapped_accounts"`
-	FilesAccessible         int            `json:"files_accessible"`
-	MissingFiles            int            `json:"missing_files"`
-	MissingFileItems        []string       `json:"missing_file_items"`
-	PreservedOnly           []string       `json:"preserved_only"`
+	Format           int            `json:"format"`
+	Applied          bool           `json:"applied"`
+	Fingerprint      string         `json:"fingerprint"`
+	Counts           map[string]int `json:"counts"`
+	ExcludedRows     map[string]int `json:"excluded_rows,omitempty"`
+	UnmappedAccounts int            `json:"unmapped_accounts"`
+	FilesAccessible  int            `json:"files_accessible"`
+	MissingFiles     int            `json:"missing_files"`
+	MissingFileItems []string       `json:"missing_file_items"`
+	PreservedOnly    []string       `json:"preserved_only"`
 }
 type sourceRow map[string]any
 
@@ -393,19 +390,6 @@ func (c *Catalog) Import(ctx context.Context, opt ImportOptions) (ImportReport, 
 		}
 		doc := sourceRow{"item": it, "media": m, "authors": array(authorRefs[mid]), "series": array(seriesRefs[mid]), "episodes": array(episodes[mid])}
 		add("catalog_items", "id,library_id,media_id,media_type,title,author,duration,explicit,missing,added_at,updated_at,tags,document", "?,?,?,?,?,?,?,?,?,?,?,?,?", id, it["libraryId"], mid, it["mediaType"], str(m["title"]), author, number(m["duration"]), truth(m["explicit"]), truth(it["isMissing"]), added, updated, raw(array(m["tags"])), raw(doc))
-		if str(it["mediaType"]) == "podcast" {
-			subscription, unassigned, e := importPodcastSubscription(opt, data["users"], it, m)
-			if e != nil {
-				return report, e
-			}
-			if subscription.sql != "" {
-				pending = append(pending, subscription)
-				report.Counts["podcast_subscriptions"]++
-				if unassigned {
-					report.UnassignedSubscriptions++
-				}
-			}
-		}
 		// Consolidate tracked files with richer audio and ebook metadata. Some podcast
 		// episode files aren't present in libraryFiles, so include them explicitly.
 		files := map[string]sourceRow{}
