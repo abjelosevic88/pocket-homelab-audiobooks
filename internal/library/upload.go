@@ -19,6 +19,21 @@ type UploadOptions struct {
 	Files                                               []UploadFile
 }
 
+// lockMediaLayout waits for a running scan or file change to finish, giving up
+// when the caller's request ends.
+func lockMediaLayout(ctx context.Context) error {
+	tick := time.NewTicker(200 * time.Millisecond)
+	defer tick.Stop()
+	for !mediaLayoutMu.TryLock() {
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("%w: a library scan or file change is active", ErrConflict)
+		case <-tick.C:
+		}
+	}
+	return nil
+}
+
 // Ingest publishes a new directory only after every uploaded audio file probes
 // successfully. It never replaces existing books or follows paths outside the
 // chosen root. Callers spool multipart bodies with their configured byte limit.
@@ -70,7 +85,7 @@ func (c *Catalog) Ingest(ctx context.Context, uid int64, opt UploadOptions) (id 
 	if err = root.Mkdir(temp, 0755); err != nil {
 		return "", err
 	}
-	published, committed := false, false
+	published, committed, locked := false, false, false
 	defer func() {
 		if !committed {
 			cleanup := temp
@@ -78,6 +93,11 @@ func (c *Catalog) Ingest(ctx context.Context, uid int64, opt UploadOptions) (id 
 				cleanup = target
 			}
 			_ = root.RemoveAll(cleanup)
+		}
+		// Release only after an unpublished directory is gone, so a scan can
+		// never index a folder that is about to disappear.
+		if locked {
+			mediaLayoutMu.Unlock()
 		}
 	}()
 	now := time.Now().UnixMilli()
@@ -153,11 +173,18 @@ func (c *Catalog) Ingest(ctx context.Context, uid int64, opt UploadOptions) (id 
 		copy.Relative = filepath.Join(temp, f.Name)
 		stagedFiles = append(stagedFiles, &copy)
 	}
-	book.Sidecar, err = c.readSidecars(ctx, stagedFiles)
+	book.Sidecar, err = c.readSidecars(ctx, book.Path, stagedFiles)
 	if err != nil {
 		return "", err
 	}
 	sort.SliceStable(book.Files, func(i, j int) bool { return naturalLess(book.Files[i].Name, book.Files[j].Name) })
+	// Staging happens in a hidden folder scans skip; publishing holds the same
+	// lock as scans so a concurrent scan cannot index the new folder as a
+	// second item before this transaction commits.
+	if err = lockMediaLayout(ctx); err != nil {
+		return "", err
+	}
+	locked = true
 	// Recheck access immediately before publishing; revocation during a long
 	// transfer cannot grant a new book to an account that no longer has access.
 	current, err := c.Account(ctx, uid)

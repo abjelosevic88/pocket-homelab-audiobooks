@@ -3,7 +3,6 @@ package library_test
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -80,10 +79,11 @@ func TestSidecarsImportPreserveEditsAndRollback(t *testing.T) {
 	if it.Title != "From sidecar" {
 		t.Fatal("explicit sidecar import ignored")
 	}
-	// Invalid metadata does not partially update either this book or new books.
+	// Invalid metadata quarantines only this book: it is not partially updated
+	// and the scan itself still completes.
 	write("metadata.json", `{"title":"Should roll back","chapters":[{"start":0,"end":999,"title":"Bad"}]}`)
-	if _, err = c.Scan(ctx, 2, lib, library.ScanOptions{ImportMetadata: true}); !errors.Is(err, library.ErrInvalid) {
-		t.Fatalf("invalid chapters: %v", err)
+	if r, err := c.Scan(ctx, 2, lib, library.ScanOptions{ImportMetadata: true}); err != nil || r.Quarantined != 1 || len(r.Failures) != 1 || r.Failures[0].Path != dir {
+		t.Fatalf("invalid chapters: %+v %v", r, err)
 	}
 	current, _ := c.Item(ctx, 2, id)
 	if string(it.Document) != string(current.Document) {
@@ -165,8 +165,8 @@ title=Chapter = one
 	}
 	before := book.UpdatedAt
 	os.WriteFile(filepath.Join(dir, "metadata.abs"), []byte(";ABMETADATA2\nmedia=book\n[CHAPTER]\nstart=NaN\nend=4\ntitle=invalid"), 0600)
-	if _, err = c.Scan(ctx, 2, id, library.ScanOptions{ImportMetadata: true}); !errors.Is(err, library.ErrInvalid) {
-		t.Fatal("invalid chapter accepted", err)
+	if r, err := c.Scan(ctx, 2, id, library.ScanOptions{ImportMetadata: true}); err != nil || r.Quarantined != 1 {
+		t.Fatal("invalid chapter accepted", r, err)
 	}
 	book, _ = c.Item(ctx, 2, book.ID)
 	if book.UpdatedAt != before {

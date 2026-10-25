@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
@@ -23,20 +24,44 @@ type ScanOptions struct {
 	ImportMetadata bool // Explicitly replace existing fields from sidecar files.
 	Started        func(string)
 	FFprobe        string
+	// FFmpeg and ArtDir enable copying embedded cover art into managed artwork
+	// storage for books without a cover image; either empty disables it.
+	FFmpeg, ArtDir string
 	Force          bool
 }
-type ScanReport struct {
-	Invalid   int    `json:"invalid"`
-	Error     string `json:"error,omitempty"`
-	ID        string `json:"id"`
-	LibraryID string `json:"library_id"`
-	Added     int    `json:"added"`
-	Updated   int    `json:"updated"`
-	Missing   int    `json:"missing"`
-	Files     int    `json:"files"`
-	Probed    int    `json:"probed"`
-	Unchanged int    `json:"unchanged"`
+
+// ScanFailure names a book (or unreadable folder) skipped by one scan.
+type ScanFailure struct {
+	Path  string `json:"path"`
+	Error string `json:"error"`
 }
+type ScanReport struct {
+	Invalid     int           `json:"invalid"`
+	Error       string        `json:"error,omitempty"`
+	ID          string        `json:"id"`
+	LibraryID   string        `json:"library_id"`
+	Added       int           `json:"added"`
+	Updated     int           `json:"updated"`
+	Missing     int           `json:"missing"`
+	Files       int           `json:"files"`
+	Probed      int           `json:"probed"`
+	Unchanged   int           `json:"unchanged"`
+	Quarantined int           `json:"quarantined"`
+	Failures    []ScanFailure `json:"failures,omitempty"`
+}
+
+const maxScanFailures = 200
+
+// quarantine records a book the scan skipped. Its existing record (if any) is
+// left exactly as it was and the rest of the library still commits.
+func (r *ScanReport) quarantine(path string, err error) {
+	r.Quarantined++
+	if len(r.Failures) < maxScanFailures {
+		r.Failures = append(r.Failures, ScanFailure{Path: path, Error: err.Error()})
+	}
+	slog.Warn("library scan skipped book", "library", r.LibraryID, "path", path, "error", err)
+}
+
 type scanFolder struct {
 	ID, Source, Relative string
 	Root                 importRoot
@@ -59,7 +84,11 @@ type scanBook struct {
 	Doc            sourceRow
 	Files          []*scannedFile
 	Path, FolderID string
-	New            bool
+	// Rel is a new book's path below its library folder, for folder parsing.
+	Rel             string
+	New             bool
+	Quarantined     bool
+	RebuildChapters bool
 }
 
 func (c *Catalog) CanScan(ctx context.Context, uid int64, lib string) error {
@@ -135,6 +164,8 @@ func scanRole(name string) string {
 	}
 	ext := strings.ToLower(filepath.Ext(name))
 	switch ext {
+	case ".opf":
+		return "supplement"
 	case ".mp3", ".m4b", ".m4a", ".mp4", ".flac", ".ogg", ".opus", ".wav", ".aac", ".wma", ".aiff":
 		return "audio"
 	case ".epub", ".pdf", ".mobi", ".azw3", ".cbz", ".cbr":
@@ -145,6 +176,16 @@ func scanRole(name string) string {
 		}
 	}
 	return ""
+}
+
+// looseImage is an image without a cover/folder name. It becomes the cover
+// only when it is the single image directly in a book folder without one.
+func looseImage(name string) bool {
+	switch strings.ToLower(filepath.Ext(name)) {
+	case ".jpg", ".jpeg", ".png", ".webp":
+		return scanRole(name) == ""
+	}
+	return false
 }
 func fileIdentity(info fs.FileInfo) string {
 	if st, ok := info.Sys().(*syscall.Stat_t); ok {
@@ -310,6 +351,15 @@ func (c *Catalog) Scan(ctx context.Context, uid int64, lib string, opt ScanOptio
 	}
 	seen := map[string]bool{}
 	newGroups := map[string]*scanBook{}
+	// Folders whose listing failed: books in or around them are skipped so an
+	// unreadable directory never reads as deleted files.
+	failedDirs := []string{}
+	existingByPath := map[string]*scanBook{}
+	for _, b := range books {
+		if prev := existingByPath[b.Path]; b.Path != "" && (prev == nil || b.Item.ID < prev.Item.ID) {
+			existingByPath[b.Path] = b
+		}
+	}
 	for _, folder := range folders {
 		root, e := os.OpenRoot(folder.Root.local)
 		if e != nil {
@@ -321,9 +371,25 @@ func (c *Catalog) Scan(ctx context.Context, uid int64, lib string, opt ScanOptio
 			if e != nil || !info.IsDir() {
 				return fmt.Errorf("library folder is unavailable; scan left catalog unchanged")
 			}
-			return fs.WalkDir(root.FS(), filepath.ToSlash(folder.Relative), func(path string, entry fs.DirEntry, walkErr error) error {
+			type candidate struct {
+				path  string
+				entry fs.DirEntry
+				role  string
+			}
+			candidates := []candidate{}
+			top := filepath.ToSlash(folder.Relative)
+			e = fs.WalkDir(root.FS(), top, func(path string, entry fs.DirEntry, walkErr error) error {
 				if walkErr != nil {
-					return walkErr
+					if path == top {
+						return walkErr
+					}
+					source := filepath.Join(folder.Root.source, filepath.FromSlash(path))
+					failedDirs = append(failedDirs, source)
+					report.quarantine(source, walkErr)
+					if entry != nil && entry.IsDir() {
+						return fs.SkipDir
+					}
+					return nil
 				}
 				if e := ctx.Err(); e != nil {
 					return e
@@ -332,20 +398,65 @@ func (c *Catalog) Scan(ctx context.Context, uid int64, lib string, opt ScanOptio
 					return nil
 				}
 				if entry.IsDir() {
-					if path != filepath.ToSlash(folder.Relative) && strings.HasPrefix(entry.Name(), ".") {
-						return fs.SkipDir
+					if path != top {
+						if strings.HasPrefix(entry.Name(), ".") {
+							return fs.SkipDir
+						}
+						// Audiobookshelf semantics: a folder holding a file named
+						// .ignore is skipped together with everything below it.
+						if _, e := root.Lstat(filepath.Join(filepath.FromSlash(path), ".ignore")); e == nil {
+							return fs.SkipDir
+						}
 					}
 					return nil
 				}
 				role := scanRole(entry.Name())
+				if role == "" && looseImage(entry.Name()) {
+					role = "image"
+				}
 				if role == "" {
 					return nil
 				}
 				path = filepath.FromSlash(path)
-				key := folder.Root.id + "/" + path
-				if pending[key] {
+				if pending[folder.Root.id+"/"+path] {
 					return nil
 				}
+				candidates = append(candidates, candidate{path, entry, role})
+				return nil
+			})
+			if e != nil {
+				return e
+			}
+			// A folder that holds another book's audio below it is a container
+			// (an author or series folder), never a book of its own. Files that
+			// already belong to a book count at that book's path, so existing
+			// layouts keep their grouping.
+			bookDirs := map[string]bool{}
+			for _, cand := range candidates {
+				if cand.role != "audio" {
+					continue
+				}
+				source := filepath.Join(folder.Root.source, cand.path)
+				dir := discGroup(source, folder.Source)
+				if old := oldByPath[folder.Root.id+"/"+cand.path]; old != nil && books[old.OldItem] != nil && books[old.OldItem].Path != "" {
+					dir = books[old.OldItem].Path
+				}
+				if dir != folder.Source && under(dir, folder.Source) {
+					bookDirs[dir] = true
+				}
+			}
+			containers := map[string]bool{}
+			for dir := range bookDirs {
+				for p := filepath.Dir(dir); p != folder.Source && under(p, folder.Source) && !containers[p]; p = filepath.Dir(p) {
+					containers[p] = true
+				}
+			}
+			for _, cand := range candidates {
+				if e := ctx.Err(); e != nil {
+					return e
+				}
+				path, entry, role := cand.path, cand.entry, cand.role
+				key := folder.Root.id + "/" + path
 				sourcePath := filepath.Join(folder.Root.source, path)
 				longest, owner := -1, ""
 				for id, book := range books {
@@ -354,22 +465,26 @@ func (c *Catalog) Scan(ctx context.Context, uid int64, lib string, opt ScanOptio
 					}
 				}
 				if removed[owner] {
-					return nil
+					continue
 				}
 				if old := oldByPath[key]; old != nil && removed[old.OldItem] {
-					return nil
+					continue
 				}
-
 				if seen[key] {
-					return nil
+					continue
 				}
 				seen[key] = true
 				info, e := entry.Info()
 				if e != nil {
-					return e
+					// The file vanished or became unreadable after listing.
+					if old := oldByPath[key]; old != nil && books[old.OldItem] != nil {
+						books[old.OldItem].Quarantined = true
+					}
+					report.quarantine(sourcePath, e)
+					continue
 				}
 				if !info.Mode().IsRegular() {
-					return nil
+					continue
 				}
 				old := oldByPath[key]
 				if old == nil {
@@ -380,9 +495,9 @@ func (c *Catalog) Scan(ctx context.Context, uid int64, lib string, opt ScanOptio
 					}
 				}
 				if old != nil && removed[old.OldItem] {
-					return nil
+					continue
 				}
-				f := &scannedFile{ID: scanStableID(folder.Root.id, path), RootID: folder.Root.id, Relative: path, Source: filepath.Join(folder.Root.source, path), Name: entry.Name(), Role: role, MIME: mimeFor(path), Size: info.Size(), Modified: info.ModTime().UnixNano(), Identity: fileIdentity(info), Doc: sourceRow{}}
+				f := &scannedFile{ID: scanStableID(folder.Root.id, path), RootID: folder.Root.id, Relative: path, Source: sourcePath, Name: entry.Name(), Role: role, MIME: mimeFor(path), Size: info.Size(), Modified: info.ModTime().UnixNano(), Identity: fileIdentity(info), Doc: sourceRow{}}
 				unchanged := false
 				if old != nil {
 					f.PreviousSource = str(object(old.Doc["metadata"])["path"])
@@ -394,6 +509,45 @@ func (c *Catalog) Scan(ctx context.Context, uid int64, lib string, opt ScanOptio
 						}
 					}
 				}
+				var book *scanBook
+				if f.OldItem != "" {
+					book = books[f.OldItem]
+				}
+				if book == nil {
+					group := discGroup(f.Source, folder.Source)
+					if group == folder.Source || containers[group] {
+						// Loose files beside other books are each their own book;
+						// artwork and sidecars at that level describe no book.
+						if role != "audio" && role != "ebook" {
+							continue
+						}
+						group = strings.TrimSuffix(f.Source, filepath.Ext(f.Source))
+						book = existingByPath[group]
+					} else {
+						for dir := group; dir != folder.Source && under(dir, folder.Source) && !containers[dir]; dir = filepath.Dir(dir) {
+							if book = existingByPath[dir]; book != nil {
+								break
+							}
+							if bookDirs[dir] {
+								group = dir
+								break
+							}
+						}
+					}
+					if book == nil {
+						book = newGroups[group]
+					}
+					if book == nil {
+						now := time.Now().UnixMilli()
+						rel, _ := filepath.Rel(folder.Source, group)
+						book = &scanBook{Item: Item{ID: newID(), LibraryID: lib, MediaID: newID(), MediaType: "book", AddedAt: now, UpdatedAt: now, Tags: []string{}}, Doc: sourceRow{"item": sourceRow{}, "media": sourceRow{}, "authors": []any{}, "series": []any{}, "episodes": []any{}}, Path: group, Rel: rel, FolderID: folder.ID, New: true}
+						newGroups[group] = book
+						books[book.Item.ID] = book
+					}
+				}
+				if book.Quarantined {
+					continue
+				}
 				if role == "audio" && unchanged && old != nil && f.Duration <= 0 && !opt.Force {
 					// Imported zero-duration audio was already unusable at the
 					// source. Preserve it and report it without blocking healthy
@@ -403,14 +557,21 @@ func (c *Catalog) Scan(ctx context.Context, uid int64, lib string, opt ScanOptio
 				} else if role == "audio" && (!unchanged || opt.Force || f.Duration <= 0) {
 					input, e := root.Open(path)
 					if e != nil {
-						return e
+						book.Quarantined = true
+						report.quarantine(book.Path, fmt.Errorf("open %s: %w", path, e))
+						continue
 					}
 					probe, e := Probe(ctx, opt.FFprobe, input)
 					input.Close()
 					report.Probed++
 					if e != nil {
+						if ctx.Err() != nil {
+							return ctx.Err()
+						}
 						if old == nil || old.Duration > 0 {
-							return fmt.Errorf("audio metadata could not be read for %s: %w", path, e)
+							book.Quarantined = true
+							report.quarantine(book.Path, fmt.Errorf("audio metadata could not be read for %s: %w", path, e))
+							continue
 						}
 						report.Invalid++
 					} else {
@@ -427,50 +588,89 @@ func (c *Catalog) Scan(ctx context.Context, uid int64, lib string, opt ScanOptio
 				if f.Probe != nil {
 					f.Doc["chapters"], f.Doc["codec"], f.Doc["metaTags"] = f.Probe.Chapters, f.Probe.Codec, f.Probe.Tags
 				}
-				var book *scanBook
-				if f.OldItem != "" {
-					book = books[f.OldItem]
-				}
-				if book == nil {
-					for _, b := range books {
-						if b.Path != "" && under(f.Source, b.Path) && (book == nil || len(b.Path) > len(book.Path)) {
-							book = b
-						}
-					}
-				}
-				if book == nil {
-					group := discGroup(f.Source, folder.Source)
-					if group == folder.Source {
-						if role == "cover" || role == "supplement" {
-							return nil
-						}
-						group = strings.TrimSuffix(f.Source, filepath.Ext(f.Source))
-					}
-					book = newGroups[group]
-					if book == nil {
-						now := time.Now().UnixMilli()
-						book = &scanBook{Item: Item{ID: newID(), LibraryID: lib, MediaID: newID(), MediaType: "book", AddedAt: now, UpdatedAt: now, Tags: []string{}}, Doc: sourceRow{"item": sourceRow{}, "media": sourceRow{}, "authors": []any{}, "series": []any{}, "episodes": []any{}}, Path: group, FolderID: folder.ID, New: true}
-						newGroups[group] = book
-						books[book.Item.ID] = book
-					}
-				}
 				book.Files = append(book.Files, f)
-				report.Files++
-				return nil
-			})
+				if role != "image" {
+					report.Files++
+				}
+			}
+			return nil
 		}()
 		if e != nil {
 			return report, e
 		}
 	}
-	// Sidecars are bounded and read before taking the database write lock.
 	for _, book := range books {
-		if book.New || opt.ImportMetadata {
-			book.Sidecar, err = c.readSidecars(ctx, book.Files)
-			if err != nil {
-				return report, err
+		for _, dir := range failedDirs {
+			if book.Path != "" && (under(book.Path, dir) || under(dir, book.Path)) {
+				book.Quarantined = true
 			}
 		}
+		// Like Audiobookshelf, a single image directly in a book folder is its
+		// cover when there is no cover.* or folder.* image.
+		files := []*scannedFile{}
+		images := []*scannedFile{}
+		hasCover := false
+		for _, f := range book.Files {
+			if f.Role == "image" {
+				if filepath.Dir(f.Source) == book.Path {
+					images = append(images, f)
+				}
+				continue
+			}
+			hasCover = hasCover || f.Role == "cover"
+			files = append(files, f)
+		}
+		current := str(object(book.Doc["media"])["coverPath"])
+		if !hasCover && len(images) == 1 && (current == "" || current == images[0].Source) {
+			images[0].Role = "cover"
+			files = append(files, images[0])
+			report.Files++
+		}
+		book.Files = files
+	}
+	// Sidecars and embedded artwork are bounded and read before taking the
+	// database write lock. A book whose sidecar cannot be read is skipped.
+	art := false
+	for _, book := range books {
+		if book.Quarantined || removed[book.Item.ID] || len(book.Files) == 0 {
+			continue
+		}
+		if book.New || opt.ImportMetadata {
+			book.Sidecar, err = c.readSidecars(ctx, book.Path, book.Files)
+			if err != nil {
+				if ctx.Err() != nil {
+					return report, ctx.Err()
+				}
+				book.Quarantined = true
+				report.quarantine(book.Path, err)
+				continue
+			}
+		}
+		if opt.FFmpeg == "" || opt.ArtDir == "" || str(object(book.Doc["media"])["coverPath"]) != "" {
+			continue
+		}
+		hasCover := false
+		var embedded *scannedFile
+		for _, f := range book.Files {
+			hasCover = hasCover || f.Role == "cover"
+			if embedded == nil && f.Role == "audio" && f.Probe != nil && f.Probe.Cover {
+				embedded = f
+			}
+		}
+		if hasCover || embedded == nil {
+			continue
+		}
+		cover, e := c.extractEmbeddedCover(ctx, opt.FFmpeg, opt.ArtDir, embedded)
+		if e != nil {
+			if ctx.Err() != nil {
+				return report, ctx.Err()
+			}
+			// Artwork is optional; the book still commits without it.
+			slog.Warn("library scan could not extract embedded cover", "path", embedded.Source, "error", e)
+			continue
+		}
+		book.Files = append(book.Files, cover)
+		art = true
 	}
 	if err = c.CanScan(ctx, uid, lib); err != nil {
 		return report, err
@@ -491,130 +691,251 @@ func (c *Catalog) Scan(ctx context.Context, uid int64, lib string, opt ScanOptio
 	if currentRevision != libraryRevision {
 		return report, fmt.Errorf("%w: library settings changed during scan", ErrConflict)
 	}
+	if art {
+		if _, err = tx.ExecContext(ctx, `INSERT INTO catalog_roots VALUES('native-art','/pocket-native-art',?) ON CONFLICT(id) DO UPDATE SET local_path=excluded.local_path`, opt.ArtDir); err != nil {
+			return report, err
+		}
+	}
+	ordered := make([]*scanBook, 0, len(books))
 	for _, book := range books {
-		if removed[book.Item.ID] {
+		ordered = append(ordered, book)
+	}
+	sort.Slice(ordered, func(i, j int) bool { return ordered[i].Path < ordered[j].Path })
+	for _, book := range ordered {
+		if removed[book.Item.ID] || book.Quarantined {
 			continue
 		}
 		if err = ctx.Err(); err != nil {
 			return report, err
 		}
-		if !book.New {
-			var version int64
-			if err = tx.QueryRowContext(ctx, `SELECT updated_at FROM catalog_items WHERE id=?`, book.Item.ID).Scan(&version); err != nil {
-				return report, err
-			}
-			if version != book.Item.UpdatedAt {
-				return report, ErrConflict
-			}
-		}
-		if book.New {
-			audioOrEbook := false
-			for _, f := range book.Files {
-				audioOrEbook = audioOrEbook || f.Role == "audio" || f.Role == "ebook"
-			}
-			if !audioOrEbook {
-				continue
-			}
-		}
-		if len(book.Files) == 0 {
-			// Never infer a deletion from absence; mark only items in scanned folders.
-			covered := false
-			for _, folder := range folders {
-				if under(book.Path, folder.Source) {
-					covered = true
-				}
-			}
-			if covered {
-				if _, err = tx.ExecContext(ctx, `UPDATE catalog_items SET missing=1,updated_at=MAX(updated_at+1,?) WHERE id=?`, time.Now().UnixMilli(), book.Item.ID); err != nil {
-					return report, err
-				}
-				report.Missing++
-			}
-			continue
-		}
-		// Preserve missing tracks and their IDs so a partial disappearance cannot
-		// silently shorten a book or shift every subsequent progress position.
-		ids := map[string]bool{}
-		book.Item.Missing = false
-		moved := ""
-		consistent := true
-		for _, f := range book.Files {
-			ids[f.ID] = true
-			if f.PreviousSource != "" && under(f.PreviousSource, book.Path) {
-				suffix := strings.TrimPrefix(f.PreviousSource, book.Path)
-				candidate := strings.TrimSuffix(f.Source, suffix)
-				if moved == "" {
-					moved = candidate
-				} else if moved != candidate {
-					consistent = false
-				}
-			}
-		}
-		if consistent && moved != "" {
-			book.Path = moved
-		}
-		for _, old := range oldByPath {
-			if old.OldItem == book.Item.ID && !ids[old.ID] && (old.Role == "audio" || old.Role == "ebook") {
-				old.Missing = true
-				old.Doc["isMissing"] = true
-				book.Item.Missing = true
-				book.Files = append(book.Files, old)
-			}
-		}
-		if book.Item.Missing {
-			report.Missing++
-		}
-		sort.SliceStable(book.Files, func(i, j int) bool {
-			a, b := book.Files[i], book.Files[j]
-			ai, bi := a.Index, b.Index
-			if ai == 0 {
-				ai = 1 << 30
-			}
-			if bi == 0 {
-				bi = 1 << 30
-			}
-			if ai != bi {
-				return ai < bi
-			}
-			if ai == 1<<30 && bi == 1<<30 {
-				ad, at := discOrder(a)
-				bd, bt := discOrder(b)
-				if ad != bd {
-					return ad < bd
-				}
-				if at == 0 {
-					at = 1 << 30
-				}
-				if bt == 0 {
-					bt = 1 << 30
-				}
-				if at != bt {
-					return at < bt
-				}
-			}
-			if a.Name == b.Name {
-				return naturalLess(a.Source, b.Source)
-			}
-			return naturalLess(a.Name, b.Name)
-		})
-		if err = c.commitScannedBook(ctx, tx, book, &report); err != nil {
+		// Each book commits inside a savepoint: a failure rolls back only
+		// that book and the rest of the library still commits.
+		if _, err = tx.ExecContext(ctx, `SAVEPOINT scan_book`); err != nil {
 			return report, err
 		}
-		if book.Sidecar != nil {
-			current, e := scanItem(tx.QueryRowContext(ctx, `SELECT `+itemColumns+` FROM catalog_items WHERE id=?`, book.Item.ID))
-			if e != nil {
-				return report, e
+		before := report
+		e := c.commitScanBook(ctx, tx, account, book, folders, oldByPath, &report)
+		if e != nil {
+			if err = ctx.Err(); err != nil {
+				return report, err
 			}
-			book.Sidecar.Expected = current.UpdatedAt
-			if e = editItem(ctx, tx, account, current, *book.Sidecar); e != nil {
-				return report, fmt.Errorf("sidecar for %s: %w", book.Path, e)
+			if _, err = tx.ExecContext(ctx, `ROLLBACK TO scan_book`); err != nil {
+				return report, err
 			}
+			report = before
+			report.quarantine(book.Path, e)
+		}
+		if _, err = tx.ExecContext(ctx, `RELEASE scan_book`); err != nil {
+			return report, err
 		}
 	}
 	if err = tx.Commit(); err != nil {
 		return report, err
 	}
 	return report, nil
+}
+
+// commitScanBook writes one walked book. Any error leaves the book's stored
+// record untouched (the caller rolls back to a savepoint).
+func (c *Catalog) commitScanBook(ctx context.Context, tx *sql.Tx, account Account, book *scanBook, folders []scanFolder, oldByPath map[string]*scannedFile, report *ScanReport) error {
+	if !book.New {
+		var version int64
+		if err := tx.QueryRowContext(ctx, `SELECT updated_at FROM catalog_items WHERE id=?`, book.Item.ID).Scan(&version); err != nil {
+			return err
+		}
+		if version != book.Item.UpdatedAt {
+			return fmt.Errorf("%w: book changed during scan", ErrConflict)
+		}
+	}
+	if book.New {
+		audioOrEbook := false
+		for _, f := range book.Files {
+			audioOrEbook = audioOrEbook || f.Role == "audio" || f.Role == "ebook"
+		}
+		if !audioOrEbook {
+			return nil
+		}
+		// An upload or another writer may have published this folder since
+		// the catalog was read; never create a second item for one path.
+		var exists int
+		if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM catalog_items WHERE library_id=? AND json_extract(document,'$.item.path')=?`, book.Item.LibraryID, book.Path).Scan(&exists); err != nil {
+			return err
+		}
+		if exists > 0 {
+			return nil
+		}
+	}
+	if len(book.Files) == 0 {
+		// Never infer a deletion from absence; mark only items in scanned folders.
+		covered := false
+		for _, folder := range folders {
+			if under(book.Path, folder.Source) {
+				covered = true
+			}
+		}
+		if covered {
+			if _, err := tx.ExecContext(ctx, `UPDATE catalog_items SET missing=1,updated_at=MAX(updated_at+1,?) WHERE id=?`, time.Now().UnixMilli(), book.Item.ID); err != nil {
+				return err
+			}
+			report.Missing++
+		}
+		return nil
+	}
+	// Preserve missing tracks and their IDs so a partial disappearance cannot
+	// silently shorten a book or shift every subsequent progress position.
+	ids := map[string]bool{}
+	book.Item.Missing = false
+	moved := ""
+	consistent := true
+	added, manual := false, false
+	for _, f := range book.Files {
+		ids[f.ID] = true
+		if f.Role == "audio" {
+			added = added || (!book.New && f.OldItem != book.Item.ID)
+			manual = manual || f.Doc["manuallyVerified"] == true
+		}
+		if f.PreviousSource != "" && under(f.PreviousSource, book.Path) {
+			suffix := strings.TrimPrefix(f.PreviousSource, book.Path)
+			candidate := strings.TrimSuffix(f.Source, suffix)
+			if moved == "" {
+				moved = candidate
+			} else if moved != candidate {
+				consistent = false
+			}
+		}
+	}
+	if consistent && moved != "" {
+		book.Path = moved
+	}
+	for _, old := range oldByPath {
+		if old.OldItem == book.Item.ID && !ids[old.ID] && (old.Role == "audio" || old.Role == "ebook") {
+			old.Missing = true
+			old.Doc["isMissing"] = true
+			book.Item.Missing = true
+			book.Files = append(book.Files, old)
+		}
+	}
+	if book.Item.Missing {
+		report.Missing++
+	}
+	// A file added to an existing book takes its natural place (disc, track
+	// tag, file name) instead of sorting last, unless someone arranged the
+	// tracks by hand. Chapters generated one-per-file follow the new order.
+	natural := added && !manual
+	book.RebuildChapters = natural && fileDerivedChapters(object(book.Doc["media"]))
+	sort.SliceStable(book.Files, func(i, j int) bool {
+		a, b := book.Files[i], book.Files[j]
+		ai, bi := a.Index, b.Index
+		if ai == 0 || natural {
+			ai = 1 << 30
+		}
+		if bi == 0 || natural {
+			bi = 1 << 30
+		}
+		if ai != bi {
+			return ai < bi
+		}
+		if ai == 1<<30 && bi == 1<<30 {
+			ad, at := discOrder(a)
+			bd, bt := discOrder(b)
+			if ad != bd {
+				return ad < bd
+			}
+			if at == 0 {
+				at = 1 << 30
+			}
+			if bt == 0 {
+				bt = 1 << 30
+			}
+			if at != bt {
+				return at < bt
+			}
+		}
+		if a.Name == b.Name {
+			return naturalLess(a.Source, b.Source)
+		}
+		return naturalLess(a.Name, b.Name)
+	})
+	if err := c.commitScannedBook(ctx, tx, book, report); err != nil {
+		return err
+	}
+	if book.Sidecar != nil {
+		current, err := scanItem(tx.QueryRowContext(ctx, `SELECT `+itemColumns+` FROM catalog_items WHERE id=?`, book.Item.ID))
+		if err != nil {
+			return err
+		}
+		book.Sidecar.Expected = current.UpdatedAt
+		if err = editItem(ctx, tx, account, current, *book.Sidecar); err != nil {
+			return fmt.Errorf("sidecar: %w", err)
+		}
+	}
+	return nil
+}
+
+// fileDerivedChapters reports whether a book's chapters are the scanner's
+// one-chapter-per-file defaults rather than embedded or edited chapters.
+func fileDerivedChapters(media sourceRow) bool {
+	chapters := array(media["chapters"])
+	names := []string{}
+	for _, v := range array(media["audioFiles"]) {
+		d := object(v)
+		if d["exclude"] == true {
+			continue
+		}
+		names = append(names, str(object(d["metadata"])["filename"]))
+	}
+	if len(chapters) == 0 || len(chapters) != len(names) {
+		return false
+	}
+	for i, ch := range chapters {
+		title := str(object(ch)["title"])
+		if title != names[i] && title != strings.TrimSuffix(names[i], filepath.Ext(names[i])) {
+			return false
+		}
+	}
+	return true
+}
+
+// extractEmbeddedCover copies an audio file's attached picture into the
+// content-addressed artwork store used for uploaded covers.
+func (c *Catalog) extractEmbeddedCover(ctx context.Context, ffmpeg, artDir string, f *scannedFile) (*scannedFile, error) {
+	input, err := c.openCatalogFile(ctx, f.RootID, f.Relative)
+	if err != nil {
+		return nil, err
+	}
+	data, format, err := ExtractCover(ctx, ffmpeg, input)
+	input.Close()
+	if err != nil {
+		return nil, err
+	}
+	sum := sha256.Sum256(data)
+	name := hex.EncodeToString(sum[:]) + "." + format
+	if err = os.MkdirAll(artDir, 0755); err != nil {
+		return nil, err
+	}
+	root, err := os.OpenRoot(artDir)
+	if err != nil {
+		return nil, err
+	}
+	defer root.Close()
+	output, err := root.OpenFile(name, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0644)
+	if err == nil {
+		_, err = output.Write(data)
+		if err == nil {
+			err = output.Sync()
+		}
+		if closeErr := output.Close(); err == nil {
+			err = closeErr
+		}
+		if err != nil {
+			_ = root.Remove(name)
+			return nil, err
+		}
+	} else if !errors.Is(err, fs.ErrExist) {
+		return nil, err
+	}
+	path := "/pocket-native-art/" + name
+	return &scannedFile{ID: "native-cover", RootID: "native-art", Relative: name, Source: path, Name: name, Role: "cover", MIME: "image/" + format, Size: int64(len(data)), Doc: sourceRow{"role": "cover", "metadata": sourceRow{"path": path, "filename": name}}}, nil
 }
 
 // Natural ordering makes track 2 precede track 10 without relying on directory order.
@@ -651,36 +972,85 @@ func (c *Catalog) commitScannedBook(ctx context.Context, tx *sql.Tx, b *scanBook
 	media := object(b.Doc["media"])
 	suppliedTitle, suppliedAuthor := str(media["title"]), str(media["authorName"])
 	item := object(b.Doc["item"])
+	var authors []string
+	seriesName, sequence := str(media["seriesName"]), ""
 	if b.New {
-		b.Item.Title = filepath.Base(b.Path)
+		// Precedence, lowest first: folder layout, embedded tags, then values
+		// supplied by an upload; sidecars are applied afterwards by editItem.
+		path := parseBookPath(b.Rel)
+		title := path.Title
+		if title == "" {
+			title = filepath.Base(b.Path)
+		}
+		if path.Author != "" {
+			authors = splitNames(path.Author)
+		}
+		narrators, year := path.Narrators, path.Year
+		if seriesName == "" {
+			seriesName, sequence = path.Series, path.Sequence
+		}
+		if path.ASIN != "" {
+			media["asin"] = path.ASIN
+		}
+		audioFiles := 0
 		for _, f := range b.Files {
-			if f.Probe != nil {
-				t := f.Probe.Tags
-				if t["album"] != "" {
-					b.Item.Title = t["album"]
-				} else if len(b.Files) == 1 && t["title"] != "" {
-					b.Item.Title = t["title"]
-				}
-				b.Item.Author = t["album_artist"]
-				if b.Item.Author == "" {
-					b.Item.Author = t["artist"]
-				}
-				media["description"] = t["description"]
-				media["publishedYear"] = t["date"]
-				if t["genre"] != "" {
-					media["genres"] = []string{t["genre"]}
-				}
-				if b.Item.Author != "" {
-					break
-				}
+			if f.Role == "audio" {
+				audioFiles++
 			}
 		}
+		var tags *tagMetadata
+		for _, f := range b.Files {
+			if f.Probe == nil {
+				continue
+			}
+			t := readTags(f.Probe.Tags, audioFiles == 1)
+			if tags == nil || (len(tags.Authors) == 0 && len(t.Authors) > 0) {
+				tags = &t
+			}
+			if len(tags.Authors) > 0 {
+				break
+			}
+		}
+		if tags != nil {
+			if tags.Title != "" {
+				title = tags.Title
+			}
+			if len(tags.Authors) > 0 {
+				authors = tags.Authors
+			}
+			if len(tags.Narrators) > 0 {
+				narrators = tags.Narrators
+			}
+			if tags.Series != "" && str(media["seriesName"]) == "" {
+				seriesName, sequence = tags.Series, tags.Sequence
+			}
+			if tags.Year != "" {
+				year = tags.Year
+			}
+			media["description"] = tags.Description
+			for k, v := range map[string]string{"subtitle": tags.Subtitle, "publisher": tags.Publisher, "language": tags.Language, "asin": tags.ASIN, "isbn": tags.ISBN} {
+				if v != "" {
+					media[k] = v
+				}
+			}
+			if tags.Genre != "" {
+				media["genres"] = []string{tags.Genre}
+			}
+		}
+		if year != "" {
+			media["publishedYear"] = year
+		}
+		if len(narrators) > 0 {
+			media["narrators"] = narrators
+		}
 		if suppliedTitle != "" {
-			b.Item.Title = suppliedTitle
+			title = suppliedTitle
 		}
 		if suppliedAuthor != "" {
-			b.Item.Author = suppliedAuthor
+			authors = []string{suppliedAuthor}
 		}
+		b.Item.Title = title
+		b.Item.Author = strings.Join(authors, ", ")
 		media["title"] = b.Item.Title
 	}
 	audio := []any{}
@@ -715,7 +1085,7 @@ func (c *Catalog) commitScannedBook(ctx context.Context, tx *sql.Tx, b *scanBook
 		}
 	}
 	// Imported/editable chapters and descriptive metadata win over auto-extraction.
-	if b.New || len(array(media["chapters"])) == 0 {
+	if b.New || b.RebuildChapters || len(array(media["chapters"])) == 0 {
 		media["chapters"] = chapters
 	}
 	media["audioFiles"], media["duration"] = audio, duration
@@ -723,42 +1093,53 @@ func (c *Catalog) commitScannedBook(ctx context.Context, tx *sql.Tx, b *scanBook
 	item["id"], item["path"], item["libraryFolderId"] = b.Item.ID, b.Path, b.FolderID
 	b.Doc["media"], b.Doc["item"] = media, item
 	if b.New {
-		if b.Item.Author != "" {
-			id := newID()
-			var old string
-			e := tx.QueryRowContext(ctx, `SELECT id FROM catalog_entities WHERE kind='authors' AND lower(json_extract(document,'$.name'))=lower(?) LIMIT 1`, b.Item.Author).Scan(&old)
-			if e == nil {
-				id = old
-			} else if !errors.Is(e, sql.ErrNoRows) {
-				return e
+		// Entities a sidecar is about to replace are not created, so tag or
+		// folder guesses never leave orphaned authors or series behind.
+		sidecar := func(k string) bool { return b.Sidecar != nil && b.Sidecar.Metadata[k] != nil }
+		if !sidecar("authors") {
+			refs := []any{}
+			for _, name := range authors {
+				id := newID()
+				var old string
+				e := tx.QueryRowContext(ctx, `SELECT id FROM catalog_entities WHERE kind='authors' AND lower(json_extract(document,'$.name'))=lower(?) LIMIT 1`, name).Scan(&old)
+				if e == nil {
+					id = old
+				} else if !errors.Is(e, sql.ErrNoRows) {
+					return e
+				}
+				author := sourceRow{"id": id, "name": name}
+				refs = append(refs, author)
+				if _, e = tx.ExecContext(ctx, `INSERT OR IGNORE INTO catalog_entities VALUES('authors',?,NULL,?)`, id, raw(author)); e != nil {
+					return e
+				}
 			}
-			author := sourceRow{"id": id, "name": b.Item.Author}
-			b.Doc["authors"] = []any{author}
-			if _, e = tx.ExecContext(ctx, `INSERT OR IGNORE INTO catalog_entities VALUES('authors',?,NULL,?)`, id, raw(author)); e != nil {
-				return e
-			}
+			b.Doc["authors"] = refs
 		}
-		if name := str(media["seriesName"]); name != "" {
+		if seriesName != "" && !sidecar("series") {
 			id := newID()
 			var old string
-			e := tx.QueryRowContext(ctx, `SELECT id FROM catalog_entities WHERE kind='series' AND library_id=? AND lower(json_extract(document,'$.name'))=lower(?) LIMIT 1`, b.Item.LibraryID, name).Scan(&old)
+			e := tx.QueryRowContext(ctx, `SELECT id FROM catalog_entities WHERE kind='series' AND library_id=? AND lower(json_extract(document,'$.name'))=lower(?) LIMIT 1`, b.Item.LibraryID, seriesName).Scan(&old)
 			if e == nil {
 				id = old
 			} else if !errors.Is(e, sql.ErrNoRows) {
 				return e
 			}
-			series := sourceRow{"id": id, "name": name}
-			b.Doc["series"] = []any{series}
+			series := sourceRow{"id": id, "name": seriesName}
 			if _, e = tx.ExecContext(ctx, `INSERT OR IGNORE INTO catalog_entities VALUES('series',?,?,?)`, id, b.Item.LibraryID, raw(series)); e != nil {
 				return e
 			}
+			ref := sourceRow{"id": id, "name": seriesName}
+			if sequence != "" {
+				ref["sequence"] = sequence
+			}
+			b.Doc["series"] = []any{ref}
 		}
-		if _, err := tx.ExecContext(ctx, `INSERT INTO catalog_items VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`, b.Item.ID, b.Item.LibraryID, b.Item.MediaID, "book", b.Item.Title, b.Item.Author, duration, false, false, b.Item.AddedAt, b.Item.UpdatedAt, raw(b.Item.Tags), raw(b.Doc)); err != nil {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO catalog_items VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`, b.Item.ID, b.Item.LibraryID, b.Item.MediaID, "book", b.Item.Title, b.Item.Author, duration, false, false, b.Item.AddedAt, b.Item.UpdatedAt, raw(b.Item.Tags), canonicalDoc(b.Doc)); err != nil {
 			return err
 		}
 		report.Added++
-	} else if !bytes.Equal([]byte(raw(b.Doc)), b.Item.Document) || b.Item.Missing {
-		if _, err := tx.ExecContext(ctx, `UPDATE catalog_items SET duration=?,missing=?,updated_at=MAX(updated_at+1,?),document=? WHERE id=?`, duration, b.Item.Missing, time.Now().UnixMilli(), raw(b.Doc), b.Item.ID); err != nil {
+	} else if !bytes.Equal([]byte(canonicalDoc(b.Doc)), b.Item.Document) || b.Item.Missing {
+		if _, err := tx.ExecContext(ctx, `UPDATE catalog_items SET duration=?,missing=?,updated_at=MAX(updated_at+1,?),document=? WHERE id=?`, duration, b.Item.Missing, time.Now().UnixMilli(), canonicalDoc(b.Doc), b.Item.ID); err != nil {
 			return err
 		}
 		report.Updated++
@@ -776,4 +1157,11 @@ func (c *Catalog) commitScannedBook(ctx context.Context, tx *sql.Tx, b *scanBook
 		}
 	}
 	return nil
+}
+
+// canonicalDoc serializes a document the way it reads back from the
+// database (object keys sorted), so typed values such as []Chapter do not make
+// an unchanged book look modified on the next scan.
+func canonicalDoc(doc sourceRow) string {
+	return raw(objectJSON(raw(doc)))
 }
