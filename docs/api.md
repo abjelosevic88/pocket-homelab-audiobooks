@@ -178,6 +178,28 @@ author (≥ 0.8) and, when both runtimes are known, a runtime within about 25%. 
 adds a missing cover; the options allow replacing details, covers, authors or series. Tags and the explicit flag are never
 changed by quick match because they can affect library access.
 
+### Library tidy-up
+
+Requires metadata editing permission and access to the library. Both tools preview first; nothing changes until the
+selected rows are applied. Fields a person changed through the book editor, the bulk editor or a match (title, subtitle,
+series) are remembered in `catalog_item_edits` and never proposed again.
+
+| Method | Path | Result |
+| --- | --- | --- |
+| GET | `/catalog/libraries/{id}/tidy` | `{books, changes:[{id, expected_updated_at, author, path, changes:[{field: title\|subtitle\|series, from, to}], reasons, confidence: high\|medium\|low}], unresolved:[{id, title, path, reason}], reasons:{reason: count}}` |
+| POST | `/catalog/libraries/{id}/tidy` | `{items:[{id, expected_updated_at}]}` (≤5000) → `{updated}`. Proposals are recomputed on the server and saved in one transaction; any book changed since the preview fails the whole apply (409) |
+| GET | `/catalog/libraries/{id}/covers?search=1` | Books without a cover: `{books:[{id, title, author, path, expected_updated_at, source: embedded\|folder\|audible\|"", detail, asin, cover_url, match, reason}]}`. Sources in order: a picture embedded in the audio, a JPEG/PNG in the book folder (or one level below), Audible artwork for the book's ASIN; `search=1` also tries a confident Audible title + author match |
+| POST | `/catalog/libraries/{id}/covers` | `{items:[{id, expected_updated_at, source, detail}]}` (≤500) → `{saved, failed:[{id, error}]}`. Each cover is fetched again and validated like an upload; books changed since the preview are skipped |
+
+Tidy reasons: `file_name`, `edition_suffix` (" - GA", "(Unabridged)", "[GraphicAudio]"), `year_suffix`, `track_number`
+("01a.Title"), `volume_prefix` ("Vol 3 - Title"), `series_in_title` ("Mistborn - 1 - The Final Empire"; a different
+existing series keeps it and gets "Mistborn, Book 1" as the subtitle when that is empty), `author_in_title`,
+`series_prefix`, `wrapped` ("(Title)"), `placeholder` ("[01]", "061 @", "III", "[Mack Bolan #080]": repaired from the
+folder, then the album tag and file names around the book's number, then "Series, Volume N"), `fragment` ("and the
+Mechanical Girl" → series name + fragment), `capitalisation`, `series`/`sequence` (from Author/Series/Book folders or a
+"Series, Book N" subtitle) and `subtitle` (junk such as "[Tagged By …]" cleared). A proposal's confidence is its weakest
+rule's; two books of one series repaired to the same title are always low.
+
 ### Author profiles
 
 Like Audiobookshelf's author match: Audnexus (`api.audnex.us`, the Audible provider's region, the shared ~1 request/s

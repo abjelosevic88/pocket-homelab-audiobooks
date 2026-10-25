@@ -123,6 +123,7 @@ func (s *Server) Router() http.Handler {
 				r.Put("/catalog/items/{id}/editor", s.nativeEditor)
 				s.nativeMatchRoutes(r)  // native_match.go
 				s.nativeAuthorRoutes(r) // native_authors.go
+				s.nativeTidyRoutes(r)   // native_tidy.go
 				r.Post("/catalog/libraries/{id}/scan", s.nativeScanStart)
 				r.Put("/catalog/libraries/{id}/watch", s.nativeWatchSettings)
 				r.Delete("/catalog/scans/{job}", s.nativeScanCancelJob)

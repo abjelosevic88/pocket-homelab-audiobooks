@@ -36,7 +36,11 @@ func (c *Catalog) Edit(ctx context.Context, uid int64, id string, in EditOptions
 		return err
 	}
 	defer tx.Rollback()
+	before := tidyFields(it)
 	if err = editItem(ctx, tx, a, it, in); err != nil {
+		return err
+	}
+	if err = recordFieldEdits(ctx, tx, it.ID, before); err != nil {
 		return err
 	}
 	return tx.Commit()
