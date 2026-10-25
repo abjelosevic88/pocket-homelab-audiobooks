@@ -16,6 +16,9 @@ type MatchQuery struct {
 	Duration float64  `json:"duration,omitempty"` // seconds
 	ASIN     string   `json:"asin,omitempty"`
 	ISBN     string   `json:"isbn,omitempty"`
+	// Narrators and Publisher tell a full-cast dramatization from a reading.
+	Narrators []string `json:"narrators,omitempty"`
+	Publisher string   `json:"publisher,omitempty"`
 }
 
 // Score explains how well a candidate fits. Parts are 0–1; -1 means unknown.
@@ -26,6 +29,8 @@ type Score struct {
 	Duration  float64 `json:"duration"`
 	Exact     bool    `json:"exact"`
 	Confident bool    `json:"confident"`
+	// Edition is false when one side is a dramatization and the other is not.
+	Edition bool `json:"edition"`
 }
 
 type Ranked struct {
@@ -47,7 +52,65 @@ var (
 	trackPrefix = regexp.MustCompile(`^\d{1,3}\s+-\s+`)
 	leadArticle = regexp.MustCompile(`^(the|a|an) `)
 	isbnChars   = regexp.MustCompile(`[^0-9Xx]`)
+	dramaWord   = regexp.MustCompile(`(?i)\b(dramati[sz]ed|dramati[sz]ation|full[- ]cast|graphic ?audio)\b|\s-\sGA$`)
 )
+
+// Confident matches need runtimes within this ratio; exact identifier matches
+// within the looser one, since a stored ASIN can point at one part of a set.
+const (
+	MaxDurationRatio      = 0.10
+	MaxExactDurationRatio = 0.25
+)
+
+// dramatized reports whether any of the texts names a full-cast production.
+func dramatized(texts ...string) bool {
+	for _, t := range texts {
+		if dramaWord.MatchString(strings.TrimSpace(t)) {
+			return true
+		}
+	}
+	return false
+}
+
+func nameList(v any) []string {
+	out := []string{}
+	switch v := v.(type) {
+	case []string:
+		out = append(out, v...)
+	case []any:
+		for _, x := range v {
+			switch x := x.(type) {
+			case string:
+				out = append(out, x)
+			case map[string]any:
+				if n, ok := x["name"].(string); ok {
+					out = append(out, n)
+				}
+			}
+		}
+	}
+	return out
+}
+
+func (q MatchQuery) dramatized() bool {
+	return dramatized(append([]string{q.Title, q.Subtitle, q.Publisher}, q.Narrators...)...)
+}
+
+func candidateDramatized(c Candidate) bool {
+	sub, _ := c.Metadata["subtitle"].(string)
+	pub, _ := c.Metadata["publisher"].(string)
+	return dramatized(append([]string{c.Title, sub, pub}, nameList(c.Metadata["narrators"])...)...)
+}
+
+func durationRatio(a, b float64) float64 {
+	if a <= 0 || b <= 0 {
+		return -1
+	}
+	if math.Abs(a-b) <= 120 {
+		return 0
+	}
+	return math.Abs(a-b) / math.Max(a, b)
+}
 
 // CleanTitle prepares a library title for a provider query: it drops
 // "(Unabridged)", bracketed release notes, series parentheticals and track
@@ -224,15 +287,19 @@ func ScoreCandidate(q MatchQuery, c Candidate) Score {
 		total, weight = total+0.1*s.Duration, weight+0.1
 	}
 	s.Total = math.Round(total/weight*1000) / 1000
-	durationOK := s.Duration < 0 || s.Duration > 0
+	ratio := durationRatio(q.Duration, c.Duration)
+	durationOK := ratio <= MaxDurationRatio
+	// A GraphicAudio dramatization and the single-narrator reading share a
+	// title and author; never quick-match one to the other.
+	s.Edition = q.dramatized() == candidateDramatized(c)
 	switch {
 	case s.Exact:
-		s.Total, s.Confident = 1, true
+		s.Total, s.Confident = 1, s.Edition && ratio <= MaxExactDurationRatio
 	case s.Author >= 0:
-		s.Confident = s.Title >= MinTitle && s.Author >= MinAuthor && durationOK
+		s.Confident = s.Title >= MinTitle && s.Author >= MinAuthor && durationOK && s.Edition
 	default:
 		// Without an author on either side, insist on a near-identical title.
-		s.Confident = s.Title >= MinTitleNoAuthor && durationOK && len(q.Authors) == 0
+		s.Confident = s.Title >= MinTitleNoAuthor && durationOK && s.Edition && len(q.Authors) == 0
 	}
 	return s
 }

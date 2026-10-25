@@ -118,6 +118,12 @@ func matchQuery(it library.Item, cur map[string]any) metadata.MatchQuery {
 	if len(q.Authors) == 0 && it.Author != "" {
 		q.Authors = metadata.SplitAuthors(it.Author)
 	}
+	for _, n := range nativeArray(cur["narrators"]) {
+		if name := nativeString(n); name != "" {
+			q.Narrators = append(q.Narrators, name)
+		}
+	}
+	q.Publisher = nativeString(cur["publisher"])
 	return q
 }
 
