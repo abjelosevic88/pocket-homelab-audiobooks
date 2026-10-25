@@ -14,8 +14,10 @@ import (
 )
 
 // Engine.IO v4 framing with the Socket.IO default namespace. Native sessions
-// support direct WebSocket or polling (no transport upgrade is advertised).
-// Authentication is Pocket authentication; no upstream key or socket is used.
+// open over WebSocket directly, or over HTTP long-polling and then upgrade to
+// WebSocket (probe "2probe"/"3probe", a "6" noop ending the pending poll, then
+// "5"), as stock Socket.IO clients do. Authentication is Pocket authentication;
+// no upstream key or socket is used.
 type nativeSocketHub struct {
 	mu      sync.Mutex
 	clients map[string]*nativeSocket
@@ -30,6 +32,9 @@ type nativeSocket struct {
 	closed  chan struct{}
 	once    sync.Once
 	polling sync.Mutex
+	noop    chan struct{} // ends a pending poll while the client upgrades
+	upgrade sync.Mutex    // one upgrade attempt at a time
+	ws      bool          // upgraded: polling is over (guarded by mu)
 }
 
 func (c *nativeSocket) stop() { c.once.Do(func() { close(c.closed) }) }
@@ -63,7 +68,7 @@ func (h *nativeSocketHub) open() *nativeSocket {
 	if len(h.clients) >= 512 {
 		return nil
 	}
-	c := &nativeSocket{id: rand.Text(), seen: time.Now(), out: make(chan string, 32), closed: make(chan struct{})}
+	c := &nativeSocket{id: rand.Text(), seen: time.Now(), out: make(chan string, 64), closed: make(chan struct{}), noop: make(chan struct{}, 1)}
 	h.clients[c.id] = c
 	return c
 }
@@ -151,6 +156,7 @@ func (s *Server) nativeSocketMessage(ctx context.Context, c *nativeSocket, msg s
 	c.uid, c.token = u.ID, tok
 	c.mu.Unlock()
 	c.push(socketEvent("init", nativeObject{"userId": a.ID, "username": u.Name}))
+	s.realtimeKick()
 }
 func (s *Server) nativeSocketProgress(ctx context.Context, uid int64, sid string) {
 	session, err := s.catalog().Session(ctx, uid, sid)
@@ -160,11 +166,14 @@ func (s *Server) nativeSocketProgress(ctx context.Context, uid int64, sid string
 	s.nativeSocketItemProgress(ctx, uid, session.ItemID, session.EpisodeID, sid, session.Device)
 }
 func (s *Server) nativeSocketItemProgress(ctx context.Context, uid int64, item, episode, sid, device string) {
+	if !s.socketListening(uid) && !s.realtimeListening(uid) {
+		return
+	}
 	progress, err := s.nativeProgress(ctx, uid)
 	if err != nil {
 		return
 	}
-	var current any
+	var current nativeObject
 	for _, v := range progress {
 		p := nativeMap(v)
 		if nativeString(p["libraryItemId"]) == item && nativeString(p["episodeId"]) == episode {
@@ -175,22 +184,8 @@ func (s *Server) nativeSocketItemProgress(ctx context.Context, uid int64, item, 
 	if current == nil {
 		return
 	}
-	event := socketEvent("user_item_progress_updated", nativeObject{"id": nativeMap(current)["id"], "sessionId": sid, "deviceDescription": device, "data": current})
-	h := s.nativeSockets
-	h.mu.Lock()
-	clients := []*nativeSocket{}
-	for _, c := range h.clients {
-		clients = append(clients, c)
-	}
-	h.mu.Unlock()
-	for _, c := range clients {
-		c.mu.Lock()
-		matches := c.uid == uid
-		c.mu.Unlock()
-		if matches && s.nativeSocketValid(ctx, c) {
-			c.push(event)
-		}
-	}
+	s.socketEmit(ctx, uid, "user_item_progress_updated", nativeObject{"id": current["id"], "sessionId": sid, "deviceDescription": device, "data": current})
+	s.realtimeSend(uid, nativeObject{"type": "progress", "item_id": item, "episode_id": episode, "session_id": sid, "device": device, "progress": current})
 }
 func (s *Server) nativeSocketHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Query().Get("EIO") != "4" {
@@ -228,64 +223,46 @@ func (s *Server) nativeSocketHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	default:
 	}
-	handshake := "0" + string(nativeJSON(nativeObject{"sid": c.id, "upgrades": []string{}, "pingInterval": 25000, "pingTimeout": 20000, "maxPayload": 65536}))
+	c.mu.Lock()
+	upgraded := c.ws
+	c.mu.Unlock()
+	upgrades := []string{}
+	if transport == "polling" {
+		upgrades = []string{"websocket"}
+	}
+	handshake := "0" + string(nativeJSON(nativeObject{"sid": c.id, "upgrades": upgrades, "pingInterval": 25000, "pingTimeout": 20000, "maxPayload": 65536}))
 	if transport == "websocket" {
-		if !fresh {
-			writeErr(w, 400, "transport upgrades are not supported")
+		if !fresh && (upgraded || !c.upgrade.TryLock()) {
+			writeErr(w, 400, "session already upgraded")
 			return
+		}
+		if !fresh {
+			defer c.upgrade.Unlock()
 		}
 		conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{InsecureSkipVerify: true})
 		if err != nil {
-			h.remove(c)
+			if fresh {
+				h.remove(c)
+			}
 			return
 		}
 		defer conn.CloseNow()
-		defer h.remove(c)
 		conn.SetReadLimit(65536)
 		ctx, cancel := context.WithCancel(r.Context())
 		defer cancel()
-		if err = conn.Write(ctx, websocket.MessageText, []byte(handshake)); err != nil {
+		if fresh {
+			defer h.remove(c)
+			if err = conn.Write(ctx, websocket.MessageText, []byte(handshake)); err != nil {
+				return
+			}
+		} else if !s.nativeSocketProbe(ctx, conn, c) {
+			// A failed probe leaves the polling transport in place.
 			return
+		} else {
+			defer h.remove(c)
 		}
-		go func() {
-			defer cancel()
-			for {
-				_, msg, err := conn.Read(ctx)
-				if err != nil {
-					return
-				}
-				s.nativeSocketMessage(ctx, c, string(msg))
-			}
-		}()
-		tick := time.NewTicker(25 * time.Second)
-		defer tick.Stop()
-		for {
-			var msg string
-			select {
-			case <-ctx.Done():
-				return
-			case <-c.closed:
-				return
-			case msg = <-c.out:
-			case <-tick.C:
-				c.mu.Lock()
-				stale := time.Since(c.seen) > 60*time.Second
-				c.mu.Unlock()
-				if stale {
-					return
-				}
-				msg = "2"
-			}
-			if !s.nativeSocketValid(ctx, c) {
-				return
-			}
-			writeCtx, done := context.WithTimeout(ctx, 10*time.Second)
-			err = conn.Write(writeCtx, websocket.MessageText, []byte(msg))
-			done()
-			if err != nil {
-				return
-			}
-		}
+		s.nativeSocketWS(ctx, cancel, conn, c)
+		return
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Content-Type", "text/plain; charset=UTF-8")
@@ -313,6 +290,10 @@ func (s *Server) nativeSocketHTTP(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 405, "method not allowed")
 		return
 	}
+	if upgraded {
+		writeErr(w, 400, "session upgraded to websocket")
+		return
+	}
 	if !c.polling.TryLock() {
 		writeErr(w, 400, "another poll is pending")
 		return
@@ -328,6 +309,17 @@ func (s *Server) nativeSocketHTTP(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 400, "closed session")
 		return
 	case msg = <-c.out:
+		// Engine.IO polling carries several packets, separated by 0x1e.
+		for more := true; more && len(msg) < 32768; {
+			select {
+			case next := <-c.out:
+				msg += "\x1e" + next
+			default:
+				more = false
+			}
+		}
+	case <-c.noop:
+		msg = "6"
 	case <-timer.C:
 		msg = "2"
 	}
@@ -336,4 +328,89 @@ func (s *Server) nativeSocketHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_, _ = io.WriteString(w, msg)
+}
+
+// nativeSocketProbe runs the client side of an Engine.IO upgrade: "2probe" is
+// answered "3probe", the pending poll is closed with a noop, and "5" completes
+// it. From then on every packet travels on the WebSocket.
+func (s *Server) nativeSocketProbe(ctx context.Context, conn *websocket.Conn, c *nativeSocket) bool {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	_, msg, err := conn.Read(ctx)
+	if err != nil || string(msg) != "2probe" {
+		return false
+	}
+	if conn.Write(ctx, websocket.MessageText, []byte("3probe")) != nil {
+		return false
+	}
+	select {
+	case c.noop <- struct{}{}:
+	default:
+	}
+	for {
+		_, msg, err = conn.Read(ctx)
+		if err != nil {
+			return false
+		}
+		switch string(msg) {
+		case "5":
+			c.mu.Lock()
+			c.ws, c.seen = true, time.Now()
+			c.mu.Unlock()
+			// A noop nobody collected must not reach the WebSocket.
+			select {
+			case <-c.noop:
+			default:
+			}
+			return true
+		case "2probe":
+			if conn.Write(ctx, websocket.MessageText, []byte("3probe")) != nil {
+				return false
+			}
+		default:
+			return false
+		}
+	}
+}
+
+func (s *Server) nativeSocketWS(ctx context.Context, cancel context.CancelFunc, conn *websocket.Conn, c *nativeSocket) {
+	go func() {
+		defer cancel()
+		for {
+			_, msg, err := conn.Read(ctx)
+			if err != nil {
+				return
+			}
+			s.nativeSocketMessage(ctx, c, string(msg))
+		}
+	}()
+	tick := time.NewTicker(25 * time.Second)
+	defer tick.Stop()
+	for {
+		var msg string
+		select {
+		case <-ctx.Done():
+			return
+		case <-c.closed:
+			return
+		case msg = <-c.out:
+		case <-tick.C:
+			c.mu.Lock()
+			stale := time.Since(c.seen) > 60*time.Second
+			c.mu.Unlock()
+			if stale {
+				return
+			}
+			msg = "2"
+		}
+		if !s.nativeSocketValid(ctx, c) {
+			return
+		}
+		writeCtx, done := context.WithTimeout(ctx, 10*time.Second)
+		err := conn.Write(writeCtx, websocket.MessageText, []byte(msg))
+		done()
+		if err != nil {
+			return
+		}
+	}
 }

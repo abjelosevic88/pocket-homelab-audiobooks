@@ -12,6 +12,7 @@ import { api, V1 } from '../lib/api'
 import { useApp } from '../lib/app-context'
 import { usePlayer } from '../lib/player'
 import { useApi } from '../lib/use'
+import { onRealtime } from '../lib/realtime'
 import type { BookPage as BookPageT, Bookmark } from '../lib/types'
 import { clock, cover, hours, left } from '../lib/books'
 import { fmtBytes, fmtDate, fmtDateTime } from '../lib/format'
@@ -40,10 +41,18 @@ export default function BookPage() {
   useEffect(() => {
     const h = (e: Event) => { const d = (e as CustomEvent<{ id: string }>).detail; if (d.id === id) reload() }
     window.addEventListener('pab:bookmarks', h)
-    const pr = (e: Event) => { const d = (e as CustomEvent<{ id: string; ended: boolean }>).detail; if (d.id === id && d.ended) reload() }
+    const pr = (e: Event) => {
+      const d = (e as CustomEvent<{ id: string; ended: boolean; time: number; remote?: boolean; progress?: number }>).detail
+      if (d.id !== id) return
+      if (d.ended) { reload(); return }
+      // Another device moved the place: show it without a reload.
+      if (d.remote) setData(cur => cur && { ...cur, book: { ...cur.book, current_time: d.time, progress: d.progress ?? (cur.book.duration ? d.time / cur.book.duration : cur.book.progress), last_played: Date.now() } })
+    }
     window.addEventListener('pab:progress', pr)
-    return () => { window.removeEventListener('pab:bookmarks', h); window.removeEventListener('pab:progress', pr) }
-  }, [id, reload])
+    // An edit, match or scan changed this book (here or anywhere else).
+    const off = onRealtime(ev => { if (ev.type === 'items' && (ev.updated.includes(id) || ev.added.includes(id))) reload() })
+    return () => { window.removeEventListener('pab:bookmarks', h); window.removeEventListener('pab:progress', pr); off() }
+  }, [id, reload, setData])
   if (notConnected) return <NotConnected message={notConnected} />
   if (error) return <div className="callout danger"><Icon name="alert" size={15} />{error}</div>
   if (!data) return <Loading />

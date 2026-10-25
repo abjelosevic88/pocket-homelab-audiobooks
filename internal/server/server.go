@@ -64,6 +64,8 @@ type Server struct {
 	nativeSockets       *nativeSocketHub
 	playMu              sync.Mutex
 	plays               map[string]*playState // playback session → what is playing
+	hls                 hlsManager            // continuous HLS encoders (native_hls.go)
+	realtime            realtimeHub           // live events for the web app (native_realtime.go)
 
 	mux http.Handler // the router, for /audiobookshelf/… (absgateway.go)
 }
@@ -126,6 +128,7 @@ func (s *Server) Bootstrap(ctx context.Context) error {
 		if err := s.recoverNativeTools(ctx); err != nil {
 			return err
 		}
+		s.hlsManager() // clears segments a previous run left behind
 		go s.nativeScanLoop(ctx)
 		go s.nativeToolsLoop(ctx)
 	}

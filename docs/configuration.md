@@ -41,6 +41,12 @@ FFmpeg and FFprobe are included in the container (`FFMPEG_PATH` and `FFPROBE_PAT
 can override executable paths). The process needs read access to the media and
 write access for audiobook uploads, Trash and metadata tools.
 
+Converted (HLS) playback writes its segments to `DATA_DIR/cache/hls`, never to
+`/tmp`; the directory is emptied at start and kept under `HLS_CACHE_MB` (default
+1024). `HLS_ENCODERS` (default 4) bounds concurrent conversions for signed-in
+listeners and `HLS_SHARE_ENCODERS` (default 2) those of public shares, which
+have their own pool so they cannot starve the owner.
+
 `MEDIA_BACKEND=audiobookshelf` retains the historical gateway for migration
 rollback. Only that mode uses `AUDIOBOOKSHELF_URL`, `AUDIOBOOKSHELF_PUBLIC_URL`,
 `AUDIOBOOKSHELF_TOKEN` or `AUDIOBOOKSHELF_USER`/`AUDIOBOOKSHELF_PASSWORD`, and

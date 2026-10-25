@@ -56,6 +56,7 @@ func (s *Server) Router() http.Handler {
 			r.Get("/catalog/items/{id}/metadata", s.nativeMetadataExport)
 			r.Head("/catalog/items/{id}/download", s.nativeDownloadBook)
 			r.Get("/media/*", s.handleMedia)
+			r.Get("/events", s.handleEvents) // live updates (native_realtime.go)
 			r.Head("/media/*", s.handleMedia)
 			r.Get("/cover/{id}", s.handleCover)
 			r.Get("/author-image/{id}", s.handleAuthorImage)

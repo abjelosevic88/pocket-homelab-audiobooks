@@ -78,6 +78,7 @@ func (s *Server) startNativeScan(uid int64, lib string, force bool, sidecars ...
 			s.log.Warn("native library scan", "library", lib, "error", err)
 		} else {
 			s.log.Info("native library scan complete", "library", lib, "added", report.Added, "updated", report.Updated, "missing", report.Missing, "quarantined", report.Quarantined)
+			s.nativeScanComplete(lib, id, report.Added, report.Updated, report.Missing)
 		}
 		done <- err
 	}()

@@ -2,7 +2,8 @@
 
 Pocket Audiobooks is one HTTP service on port 8080. Audio is long: a book plays as one request with byte ranges
 per file for as long as it plays, a converted one is an HLS playlist and a stream of segments
-(`/api/v1/media/…`). So the proxy must not buffer responses and must not time them out early. Set
+(`/api/v1/media/…`), and live updates are a long-lived event stream (`/api/v1/events`) and WebSockets
+(`/socket.io/`). So the proxy must not buffer responses and must not time them out early. Set
 `SECURE_COOKIES=true` behind HTTPS and `BASE_URL` to the public address.
 
 ## Caddy

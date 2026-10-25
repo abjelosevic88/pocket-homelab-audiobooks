@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { useApp } from '../lib/app-context'
 import { usePlayer } from '../lib/player'
 import { useApi } from '../lib/use'
+import { onRealtime } from '../lib/realtime'
 import type { Home as HomeT } from '../lib/types'
 import { V1, cover, hours, left } from '../lib/books'
 import { Icon } from '../components/icons'
@@ -23,7 +24,9 @@ export default function Home() {
     const t = { id: 0 as number | undefined }
     const r = () => { clearTimeout(t.id); t.id = window.setTimeout(reload, 1500) }
     window.addEventListener('pab:progress', r)
-    return () => { window.removeEventListener('pab:progress', r); clearTimeout(t.id) }
+    // new or changed books (a scan, a match, an edit on another device)
+    const off = onRealtime(ev => { if (ev.type === 'items' || ev.type === 'scan_complete') r() })
+    return () => { window.removeEventListener('pab:progress', r); off(); clearTimeout(t.id) }
   }, [reload])
   if (notConnected) return <NotConnected message={notConnected} />
   if (error) return <div className="callout danger"><Icon name="alert" size={15} />{error}</div>

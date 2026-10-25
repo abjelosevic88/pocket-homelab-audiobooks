@@ -68,11 +68,17 @@ func TestNativeSocketWebsocketAndPolling(t *testing.T) {
 	if w.Code != 200 {
 		t.Fatal(w.Code)
 	}
-	for _, expected := range []string{"40{", `"init"`} {
+	// One poll may carry several packets (0x1e-separated).
+	polled := ""
+	for i := 0; i < 2 && !(strings.Contains(polled, "40{") && strings.Contains(polled, `"init"`)); i++ {
 		w = nativeCall(t, h, "", "GET", path, "")
-		if w.Code != 200 || !strings.Contains(w.Body.String(), expected) {
+		if w.Code != 200 {
 			t.Fatalf("poll %d %s", w.Code, w.Body.String())
 		}
+		polled += w.Body.String() + "\x1e"
+	}
+	if !strings.HasPrefix(polled, "40{") || !strings.Contains(polled, `"init"`) {
+		t.Fatalf("polls %q", polled)
 	}
 	// Revocation must stop an existing transport, not only the next login.
 	if _, err = s.store.DB.Exec(`DELETE FROM api_tokens WHERE user_id=?`, a.u.ID); err != nil {

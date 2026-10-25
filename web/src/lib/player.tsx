@@ -4,6 +4,7 @@ import { flushReports, onSessionEnded, queueReport } from './playback-outbox'
 import { useApp } from './app-context'
 import { useToast } from '../components/ui'
 import { CLIENT_ID, clock, cover, deviceName, markUndecodable, playableTypes } from './books'
+import { holdRealtime, onRealtime, useRealtimeConnected } from './realtime'
 import type { Book, Chapter, NowPlaying, PlayInfo, PlayTrack } from './types'
 
 /** The one audio element of the app and everything around it: the book that
@@ -162,8 +163,9 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const applyMediaSession = useCallback((b: Book | null) => {
     if (!('mediaSession' in navigator)) return
     if (!b) { navigator.mediaSession.metadata = null; return }
-    const art = b.cover ? new URL(cover(b.cover, 512), window.location.origin).href : ''
-    navigator.mediaSession.metadata = new MediaMetadata({ title: b.title, artist: b.author, album: b.series || b.title, artwork: art ? [{ src: art, sizes: '512x512' }] : [] })
+    // Several sizes: lock screens, watches and car displays each pick their own.
+    const artwork = b.cover ? [96, 192, 256, 512].map(n => ({ src: new URL(cover(b.cover, n / Math.min(2, window.devicePixelRatio || 1)), window.location.origin).href, sizes: `${n}x${n}` })) : []
+    navigator.mediaSession.metadata = new MediaMetadata({ title: b.title, artist: b.author, album: b.series || b.title, artwork })
   }, [])
 
   // ---- playing a book ----
@@ -409,20 +411,31 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     const ms = navigator.mediaSession
     const back = settings?.skip_back || 10, fwd = settings?.skip_forward || 30
     try {
-      ms.setActionHandler('play', () => toggle())
+      ms.setActionHandler('play', () => { if (audio.paused || !cur.current) toggle() })
       ms.setActionHandler('pause', () => audio.pause())
       ms.setActionHandler('seekbackward', d => skip(-(d.seekOffset || back)))
       ms.setActionHandler('seekforward', d => skip(d.seekOffset || fwd))
-      ms.setActionHandler('seekto', d => { if (d.seekTime !== undefined) seekTo(d.seekTime) })
+      ms.setActionHandler('seekto', d => { if (d.seekTime !== undefined && Number.isFinite(d.seekTime)) seekTo(d.seekTime) })
+      // Previous/next move by chapter (five minutes in books without chapters).
       ms.setActionHandler('previoustrack', () => chapterStep(-1))
       ms.setActionHandler('nexttrack', () => chapterStep(1))
     } catch { /* older browsers */ }
+    // Not every browser knows "stop"; it pauses (the book stays loaded).
+    try { ms.setActionHandler('stop', () => audio.pause()) } catch { /* unsupported action */ }
   }, [audio, settings?.skip_back, settings?.skip_forward, skip, seekTo, toggle, chapterStep])
   useEffect(() => {
-    if (!('mediaSession' in navigator) || !book || !duration) return
-    try { navigator.mediaSession.setPositionState({ duration, playbackRate: rate, position: Math.min(time, duration) }) } catch { /* ignore */ }
+    if (!('mediaSession' in navigator)) return
+    if (!book || !duration) { try { navigator.mediaSession.playbackState = 'none'; navigator.mediaSession.setPositionState() } catch { /* ignore */ } return }
+    try { navigator.mediaSession.setPositionState({ duration, playbackRate: rate || 1, position: Math.max(0, Math.min(time, duration)) }) } catch { /* ignore */ }
     try { navigator.mediaSession.playbackState = playing ? 'playing' : 'paused' } catch { /* ignore */ }
   }, [book, duration, time, rate, playing])
+  // The chapter shows as the "album" line of lock-screen and OS controls.
+  const chapterTitle = chapter?.title
+  useEffect(() => {
+    if (!('mediaSession' in navigator) || !book) return
+    const md = navigator.mediaSession.metadata
+    if (md) md.album = chapterTitle || book.series || book.title
+  }, [book, chapterTitle])
   useEffect(() => {
     const h = (ev: KeyboardEvent) => {
       const t = ev.target as HTMLElement
@@ -527,28 +540,62 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   }, [applyMediaSession, user?.id, lastKey])
   useEffect(() => { if (!cur.current && !pending.current && settings?.speed) { rateRef.current = settings.speed; setRateState(settings.speed) } }, [settings?.speed])
 
-  // what plays elsewhere: another browser, or an Audiobookshelf app on the phone
+  // what plays elsewhere: another browser, or an Audiobookshelf app on the phone.
+  // Live events say when something changed; a slow poll covers a dropped stream.
   const [remote, setRemote] = useState<NowPlaying | null>(null)
   const [clockOffset, setClockOffset] = useState(0)
+  const live = useRealtimeConnected()
+  const refreshRemote = useRef<() => void>(() => {})
+  useEffect(() => { if (user) return holdRealtime() }, [user?.id])
   useEffect(() => {
-    let t: number | undefined, live = true
+    let alive = true, busy = false, again = false
+    let expiry: number | undefined
     const poll = async () => {
-      if (document.visibilityState === 'visible') {
-        try {
-          const sid = cur.current?.session || ''
-          const r = await api.get<NowPlaying>(`${V1}/now-playing?client=${CLIENT_ID}&session=${encodeURIComponent(sid)}`)
-          if (!live) return
-          setClockOffset(r.server_time - Date.now())
-          setRemote(r.active ? r : null)
-        } catch { /* ignore */ }
+      if (busy) { again = true; return }
+      busy = true
+      try {
+        const sid = cur.current?.session || ''
+        const r = await api.get<NowPlaying>(`${V1}/now-playing?client=${CLIENT_ID}&session=${encodeURIComponent(sid)}`)
+        if (!alive) return
+        const offset = r.server_time - Date.now()
+        setClockOffset(offset)
+        setRemote(r.active ? r : null)
+        // A device that stops reporting without closing stops counting as playing
+        // after 40 s: ask again then, as no event will say so.
+        clearTimeout(expiry)
+        if (r.active && r.playing && r.updated_at) expiry = window.setTimeout(poll, Math.max(5000, r.updated_at + 41_000 - r.server_time))
+      } catch { /* ignore */ } finally {
+        busy = false
+        if (again && alive) { again = false; poll() }
       }
-      if (live) t = window.setTimeout(poll, 15000)
     }
+    let debounce: number | undefined
+    refreshRemote.current = () => { clearTimeout(debounce); debounce = window.setTimeout(poll, 250) }
     poll()
-    const vis = () => { if (document.visibilityState === 'visible') { clearTimeout(t); poll() } }
+    const vis = () => { if (document.visibilityState === 'visible') poll() }
     document.addEventListener('visibilitychange', vis)
-    return () => { live = false; clearTimeout(t); document.removeEventListener('visibilitychange', vis) }
+    return () => { alive = false; clearTimeout(expiry); clearTimeout(debounce); document.removeEventListener('visibilitychange', vis) }
   }, [])
+  useEffect(() => {
+    if (live) { refreshRemote.current(); return }
+    const t = window.setInterval(() => { if (document.visibilityState === 'visible') refreshRemote.current() }, 60_000)
+    return () => clearInterval(t)
+  }, [live])
+  useEffect(() => onRealtime(ev => {
+    if (ev.type === 'hello') { setClockOffset(ev.server_time - Date.now()); return }
+    if (ev.type === 'session') { if (ev.session_id !== cur.current?.session) refreshRemote.current(); return }
+    if (ev.type !== 'progress' || ev.session_id === cur.current?.session) return
+    refreshRemote.current()
+    const t = ev.progress.currentTime ?? 0
+    const finished = !!ev.progress.isFinished
+    window.dispatchEvent(new CustomEvent('pab:progress', { detail: { id: ev.item_id, time: t, ended: finished, remote: true, progress: ev.progress.progress } }))
+    // The same book, paused here: show where the other device is, and resume
+    // from there (a new session starts from the newest progress).
+    if (!ev.session_id) return // the e-book reader: no listening place moved
+    const c = cur.current
+    if (c && c.book.id === ev.item_id && audio.paused) { sessionEnded.current = true; setTime(t) }
+    else if (!c && pending.current?.id === ev.item_id) { pending.current = { ...pending.current, current_time: t, finished }; setTime(t) }
+  }), [audio])
   // another device wins while it plays and this tab does not; a paused one shows only when nothing is loaded here
   const remoteVisible = !!remote && !playing && (!!remote.playing || !book)
 
