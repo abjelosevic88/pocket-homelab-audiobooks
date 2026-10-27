@@ -29,7 +29,7 @@ export function Sidebar({ onNavigate }: { onNavigate: () => void }) {
       <div className="sb-brand">
         <img src="/favicon.svg" alt="" className="sb-logo" />
         <span className="sb-title">{title !== 'Pocket Audiobooks' ? title : <>Pocket <b>Audiobooks</b></>}</span>
-        {status?.version && <span className="sb-version" title={`Version ${status.version}`}>{/^\d/.test(status.version) ? 'v' + status.version : status.version}</span>}
+        {status?.version && <span className="sb-version" title={`Version ${status.version}`}>{/^v?\d+\.\d+/.test(status.version) ? 'v' + status.version.replace(/^v/, '').replace(/[-+].*$/, '') : status.version}</span>}
       </div>
       {p.book ? (
         <button type="button" className="sb-now" onClick={() => { p.toggle() }} title={p.playing ? 'Pause' : 'Continue listening'}>
