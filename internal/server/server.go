@@ -26,6 +26,8 @@ var Version = "dev"
 
 // Server holds dependencies.
 type Server struct {
+	// rqLink stands in for Core's link tokens to Pocket Requests in tests (nil = ask Core).
+	rqLink     func(ctx context.Context, email string) (*core.LinkToken, error)
 	cfg        *config.Config
 	store      *store.Store
 	log        *slog.Logger
@@ -305,6 +307,7 @@ func (s *Server) registerWithCore(ctx context.Context) error {
 		URL: s.cfg.CoreAppURL, PublicURL: s.cfg.BaseURL, HealthPath: "/healthz", EnvPrefix: "AUDIOBOOKS",
 		Publishes: eventTopics,
 		Offers:    linkOffers,
+		Uses:      []core.Use{requestsUse},
 		Services: []core.ServiceUse{
 			{Type: "audiobookshelf", Reason: "Your audiobooks: Pocket Audiobooks plays them with your own Audiobookshelf account, so your place, finished books and bookmarks stay yours in every app"},
 		},

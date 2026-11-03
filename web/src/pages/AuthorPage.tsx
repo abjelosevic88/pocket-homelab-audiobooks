@@ -9,6 +9,7 @@ import { useCrumb } from '../components/Layout'
 import { Loading } from '../components/ui'
 import { useApp } from '../lib/app-context'
 import { AuthorEditDialog, AuthorMatchDialog, type NativeAuthor } from '../components/AuthorDialogs'
+import { MoreByAuthor } from '../components/GetIt'
 
 export default function AuthorPage() {
   const { id = '' } = useParams()
@@ -60,6 +61,7 @@ export default function AuthorPage() {
           <div className="grid-covers">{bs.map(b => <BookCard key={b.id} b={b} />)}</div>
         </section>
       ))}
+      {settings?.backend === 'native' && a.name && <MoreByAuthor authorId={id} name={a.name} />}
     </div>
   )
 }

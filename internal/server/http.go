@@ -89,6 +89,9 @@ func (s *Server) Router() http.Handler {
 				r.Get("/day/{date}", s.handleDay)
 				r.Get("/link/find", s.handleLinkFind) // link_api.go
 				r.Post("/link/scan", s.handleLinkScan)
+				r.Get("/get-it/items/{id}", s.handleGetItItem) // getit.go
+				r.Get("/get-it/authors/{id}", s.handleGetItAuthor)
+				r.Post("/get-it", s.handleGetItAsk)
 
 				r.Get("/shares", s.nativeShares)
 				r.Post("/shares", s.nativeShares)

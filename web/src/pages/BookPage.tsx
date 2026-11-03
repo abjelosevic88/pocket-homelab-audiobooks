@@ -20,6 +20,7 @@ import { Icon } from '../components/icons'
 import { BookRow, Img, NotConnected, Progress } from '../components/cards'
 import { useCrumb } from '../components/Layout'
 import { Confirm, Loading, MenuButton, type MenuItem, errMsg, useToast } from '../components/ui'
+import { GetItCard } from '../components/GetIt'
 
 export default function BookPage() {
   const { id = '' } = useParams()
@@ -182,6 +183,7 @@ export default function BookPage() {
           ))}
         </div>
         <aside className="book-side">
+          {data.backend === 'native' && <GetItCard itemId={b.id} />}
           <section className="card side-card">
             <h3>Bookmarks</h3>
             {data.bookmarks.length === 0 ? <p className="muted small">None yet. While listening, press <kbd>b</kbd> to keep a moment.</p> : (
