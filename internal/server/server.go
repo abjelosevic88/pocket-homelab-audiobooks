@@ -60,6 +60,7 @@ type Server struct {
 	loginAttempts       shareAttempts // password sign-in per client address
 	nativeScanMu        sync.Mutex
 	nativeScanCancel    map[string]context.CancelFunc
+	linkScans           map[string]int64 // library → who asked, for scans a linked app asked for while another ran (link_api.go)
 	nativeFetchHTTP     *http.Client
 	nativeSockets       *nativeSocketHub
 	playMu              sync.Mutex

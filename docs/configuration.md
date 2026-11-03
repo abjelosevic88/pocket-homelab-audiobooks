@@ -91,7 +91,7 @@ rollback. Only that mode uses `AUDIOBOOKSHELF_URL`, `AUDIOBOOKSHELF_PUBLIC_URL`,
 
 | Variable | Default | What it does |
 |---|---|---|
-| `CORE_URL` / `CORE_REGISTRATION_KEY` | – | [Pocket Core](https://github.com/abjelosevic88/pocket-homelab-core): register on start (the key is needed once; the app token is kept in `$DATA_DIR/core.token`), "Sign in with Pocket Core", accept the tokens Core gives paired phones, publish `audiobooks.finished`, offer `listening:read` to other Pocket apps (Pocket Day, Pocket Bookshelf) |
+| `CORE_URL` / `CORE_REGISTRATION_KEY` | – | [Pocket Core](https://github.com/abjelosevic88/pocket-homelab-core): register on start (the key is needed once; the app token is kept in `$DATA_DIR/core.token`), "Sign in with Pocket Core", accept the tokens Core gives paired phones, publish `audiobooks.finished`, offer `listening:read` to other Pocket apps (Pocket Day, Pocket Bookshelf) and `library:read` / `library:scan` (Pocket Requests) |
 | `CORE_APP_URL` | `BASE_URL` | How Core reaches this app for health checks (e.g. `http://host.docker.internal:8202`) |
 
 With `CORE_URL` empty the app behaves exactly as a standalone app: every Core-only choice stays visible, greyed out

@@ -61,11 +61,24 @@ A **book** is a native library item trimmed to what a screen needs — `id`, `li
 
 ## Pocket Core app links
 
-Pocket Audiobooks offers one scope to other Pocket apps (switched on per person in Pocket Core):
+Pocket Audiobooks offers three scopes to other Pocket apps (switched on per person in Pocket Core):
 
 | Scope | Routes |
 |---|---|
 | `listening:read` | `GET /dashboard`, `/history`, `/stats`, `/finished`, `/day/{date}`, covers |
+| `library:read` | `GET /link/find?title=&author=` (or `?q=`; `limit` ≤ 25), covers |
+| `library:scan` | `POST /link/scan` `{"path": "/abs/folder/of/the/new/book"}` |
+
+`/link/find` returns `{"items": [{id, title, subtitle, authors, narrators, series, series_index, library_id, cover,
+url_path, added_at}]}` from the audiobooks the person may open, newest first. With `title` and `author` one folded title
+must begin with the other ("Project Hail Mary (Unabridged)" finds "Project Hail Mary"; accents and case don't matter)
+and an author must match; `q` needs every word in the title, subtitle, authors or series. `cover` and `url_path` are
+paths on this server.
+
+`/link/scan` finds the book library one of whose folders holds `path` (the server's own path or the folder as written
+in the library) and scans it: `202 {"library_id", "started": true}`, or `"started": false` when another scan is
+running — it starts right after. 400 for a relative path or `..`, 404 when no library of the person's holds the folder.
+The scan runs as the person when they may scan, else as the library's scheduled scans do.
 
 Event published on the Core bus (with `user_email`): `audiobooks.finished` (a book finished, here or in an
 Audiobookshelf app).

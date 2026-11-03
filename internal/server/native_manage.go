@@ -399,7 +399,9 @@ func (s *Server) nativeScanLoop(ctx context.Context) {
 			return
 		case <-tick.C:
 		}
-		s.runDueScans(ctx, time.Now())
+		if len(s.runLinkScans(ctx)) == 0 {
+			s.runDueScans(ctx, time.Now())
+		}
 	}
 }
 

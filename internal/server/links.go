@@ -18,6 +18,8 @@ import (
 
 var linkOffers = []core.Offer{
 	{Scope: "listening:read", Name: "See what you listen to", Description: "Read what you listened to (per day, history, finished books and stats) and the book you're in the middle of, for your journal, reading log and dashboards."},
+	{Scope: "library:read", Name: "Look through your audiobooks", Description: "Search the audiobooks you can open and see their covers, authors and narrators, e.g. to show that you already own a book as an audiobook."},
+	{Scope: "library:scan", Name: "Add new audiobooks", Description: "Have a library scanned after the app put a new book into its folder (Pocket Requests filing an audiobook you asked for), so it shows up within moments."},
 }
 
 type linkRoute struct {
@@ -31,6 +33,9 @@ var linkRoutes = []linkRoute{
 	{"GET", regexp.MustCompile(`^/api/v1/(dashboard|history|stats|finished)$`), "listening:read"},
 	{"GET", regexp.MustCompile(`^/api/v1/day/\d{4}-\d{2}-\d{2}$`), "listening:read"},
 	{"GET", regexp.MustCompile(`^/api/v1/cover/[0-9A-Za-z-]+$`), "listening:read"},
+	{"GET", regexp.MustCompile(`^/api/v1/cover/[0-9A-Za-z-]+$`), "library:read"},
+	{"GET", regexp.MustCompile(`^/api/v1/link/find$`), "library:read"},
+	{"POST", regexp.MustCompile(`^/api/v1/link/scan$`), "library:scan"},
 }
 
 var errLinkScope = errors.New("outside the link's scope")
