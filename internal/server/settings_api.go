@@ -287,7 +287,8 @@ func (s *Server) handleExportJSON(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, doc)
 }
 
-// handleImportJSON adds an export to the caller's own data (rows already there are kept).
+// handleImportJSON adds an export to the caller's own data (rows already there
+// are kept, so importing the same file twice adds nothing).
 func (s *Server) handleImportJSON(w http.ResponseWriter, r *http.Request) {
 	var doc exportDoc
 	if err := decode(r, &doc); err != nil {
@@ -296,12 +297,22 @@ func (s *Server) handleImportJSON(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx := r.Context()
 	uid := actorID(ctx)
-	counts := map[string]int{}
+	counts := map[string]int{"listens": 0, "finished": 0, "up_next": 0}
+	// a listen without an Audiobookshelf session id is known by its book and start
+	have, _, _ := s.store.Listens(ctx, uid, store.ListenFilter{Limit: -1})
+	seen := map[string]bool{}
+	for _, l := range have {
+		seen[l.ItemID+"|"+l.StartedAt] = true
+	}
 	for _, l := range doc.Listens {
 		l.ID = 0
 		if l.ItemID == "" || l.StartedAt == "" {
 			continue
 		}
+		if l.ABSID == "" && seen[l.ItemID+"|"+l.StartedAt] {
+			continue
+		}
+		seen[l.ItemID+"|"+l.StartedAt] = true
 		if l.ABSID == "" {
 			l.Source = "import"
 		}

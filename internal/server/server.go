@@ -308,6 +308,7 @@ func (s *Server) registerWithCore(ctx context.Context) error {
 		Publishes: eventTopics,
 		Offers:    linkOffers,
 		Uses:      []core.Use{requestsUse},
+		Portable:  portable,
 		Services: []core.ServiceUse{
 			{Type: "audiobookshelf", Reason: "Your audiobooks: Pocket Audiobooks plays them with your own Audiobookshelf account, so your place, finished books and bookmarks stay yours in every app"},
 		},
