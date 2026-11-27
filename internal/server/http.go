@@ -186,6 +186,9 @@ func (s *Server) Router() http.Handler {
 				r.Get("/export.json", s.handleExportJSON)
 				r.Post("/import", s.handleImportJSON)
 				r.Get("/pocket/portable", portable.Handler())
+				r.Get("/pocket/search", core.SearchHandler(s.pocketSearch)) // capabilities.go
+				r.Get("/pocket/day/{date}", core.DayHandler(s.pocketDay))
+				r.Get("/pocket/widget", core.WidgetHandler(s.pocketWidget))
 			})
 		})
 	})

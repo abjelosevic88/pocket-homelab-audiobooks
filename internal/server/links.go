@@ -35,6 +35,17 @@ var portable = &core.Portable{
 	},
 }
 
+// capabilities are what Pocket Search, Pocket Day and Pocket Hub may ask
+// here (docs/capabilities.md in pocket-homelab-core): the routes are in
+// capabilities.go, Register adds the pocket:search, pocket:day and
+// pocket:widget offers. A quick line has nowhere to go in an audiobook
+// library, so there is no capture.
+var capabilities = core.Capabilities{
+	Search: &core.Searchable{What: "Your audiobooks, by title, author, narrator and series", Kinds: []string{"audiobook"}, Bangs: []string{"audiobooks", "audio"}},
+	Day:    &core.DayFeed{Label: "Audiobooks", One: "book", Many: "books", Unit: "min", What: "The books you listened to that day, for how long, and the ones you finished"},
+	Widget: &core.Widget{Title: "Continue listening", What: "The books you are in the middle of, with the time left, then the newest books"},
+}
+
 type linkRoute struct {
 	methods string
 	path    *regexp.Regexp
@@ -55,7 +66,7 @@ var errLinkScope = errors.New("outside the link's scope")
 
 // linkAllows reports whether a link token with these scopes may make this request.
 func linkAllows(scopes []string, r *http.Request) bool {
-	if portable.LinkAllows(scopes, r) {
+	if portable.LinkAllows(scopes, r) || capabilities.LinkAllows(scopes, r) {
 		return true
 	}
 	for _, lr := range linkRoutes {

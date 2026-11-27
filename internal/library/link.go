@@ -252,3 +252,34 @@ func (c *Catalog) LibraryForPath(ctx context.Context, userID int64, path string)
 	}
 	return best, nil
 }
+
+// NewestBooks lists the ids of the newest audiobooks the person may open in
+// the libraries keep allows (nil = all), newest first, reading only as many
+// rows as it needs (Pocket Hub's widget shows a few; the library pages read
+// every book).
+func (c *Catalog) NewestBooks(ctx context.Context, userID int64, limit int, keep func(libraryID string) bool) ([]string, error) {
+	out := []string{}
+	a, err := c.Account(ctx, userID)
+	if err != nil {
+		return out, err
+	}
+	rows, err := c.DB.QueryContext(ctx, `SELECT `+strings.TrimSuffix(itemColumns, ",document")+`,'' AS document FROM catalog_items WHERE media_type='book'
+	  AND NOT EXISTS(SELECT 1 FROM catalog_library_state s WHERE s.library_id=catalog_items.library_id AND s.archived=1)
+	  AND NOT EXISTS(SELECT 1 FROM catalog_removed_items x WHERE x.item_id=catalog_items.id)
+	  AND EXISTS(SELECT 1 FROM catalog_libraries l WHERE l.id=catalog_items.library_id AND l.media_type='book')
+	  ORDER BY added_at DESC, id`)
+	if err != nil {
+		return out, err
+	}
+	defer rows.Close()
+	for rows.Next() && len(out) < limit {
+		it, err := scanItem(rows)
+		if err != nil {
+			return out, err
+		}
+		if !it.Missing && a.allows(it) && (keep == nil || keep(it.LibraryID)) {
+			out = append(out, it.ID)
+		}
+	}
+	return out, rows.Err()
+}

@@ -112,6 +112,9 @@ directory. See [backup and restore](docs/backup.md).
 
 Pocket Core provides sign-in and paired-device authentication. Pocket Day and
 Pocket Bookshelf read the signed-in person’s listening through enabled Core links.
+Pocket Search finds your audiobooks by title, author, narrator or series (`!audiobooks`),
+Pocket Day can show what you listened to each day, and Pocket Hub shows a
+"Continue listening" widget with the time left in each book.
 Homepage has a dashboard endpoint, and personal notifications cover finished
 books and the weekly recap.
 

@@ -80,6 +80,21 @@ in the library) and scans it: `202 {"library_id", "started": true}`, or `"starte
 running — it starts right after. 400 for a relative path or `..`, 404 when no library of the person's holds the folder.
 The scan runs as the person when they may scan, else as the library's scheduled scans do.
 
+### Pocket Search, Pocket Day and Pocket Hub
+
+The app declares three capabilities in its manifest (category `Media`), and Pocket Core adds their scopes to the
+offers above. Each scope opens its one route and nothing else; `listening:read` and `library:read` do not open them.
+They answer for the person, from the libraries they may open (not the ones they hid), with their own place in each
+book, and change nothing.
+
+| Scope | Route | What comes back |
+|---|---|---|
+| `pocket:search` | `GET /pocket/search?q=&limit=` | Books (`kind` `audiobook`) by title, author, narrator or series, as the search page finds them; `snippet` "Andy Weir · read by Ray Porter · 16 h 10 min · 40% listened", `date` last listened or added, `url` `/book/{id}`. Bangs `!audiobooks`, `!audio` |
+| `pocket:day` | `GET /pocket/day/{YYYY-MM-DD}[?tz=]` | One item per book listened to that day (minutes, from→to, author, cover, ticked when finished that day) and books finished without listening; summary "Listened to Project Hail Mary for 1 h 10 min" |
+| `pocket:widget` | `GET /pocket/widget` | "Continue listening": books in progress, the latest first, with the time left ("Project Hail Mary, 3 h 20 min left"), then the newest books |
+
+There is no quick capture: a line typed elsewhere has no place in an audiobook library.
+
 Event published on the Core bus (with `user_email`): `audiobooks.finished` (a book finished, here or in an
 Audiobookshelf app).
 
