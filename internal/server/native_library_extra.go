@@ -64,5 +64,20 @@ func (s *Server) nativeLibraryStats(r *http.Request, items []nativeObject) nativ
 	longest := append([]nativeObject{}, items...)
 	nativeSortItems(largest, "size", true, "")
 	nativeSortItems(longest, "media.duration", true, "")
-	return nativeObject{"totalItems": len(items), "totalSize": size, "totalDuration": duration, "numAudioTracks": tracks, "numAuthors": len(authors), "totalAuthors": len(authors), "authorsWithCount": authors[:min(10, len(authors))], "totalGenres": len(genres), "genresWithCount": genreCounts, "numSeries": len(s.nativeGroups(r.Context(), items, "series")), "largestItems": largest[:min(10, len(largest))], "longestItems": longest[:min(10, len(longest))]}
+	// Top tens are compact, as in Audiobookshelf: full items (a podcast carries
+	// every episode) made this answer tens of megabytes.
+	topAuthors := []nativeObject{}
+	for _, a := range authors[:min(10, len(authors))] {
+		topAuthors = append(topAuthors, nativeObject{"id": a["id"], "name": a["name"], "count": a["numBooks"], "numBooks": a["numBooks"]})
+	}
+	top := func(sorted []nativeObject, key string, value func(nativeObject) any) []nativeObject {
+		out := []nativeObject{}
+		for _, it := range sorted[:min(10, len(sorted))] {
+			out = append(out, nativeObject{"id": it["id"], "title": nativeMetadata(it)["title"], key: value(it)})
+		}
+		return out
+	}
+	largestItems := top(largest, "size", func(it nativeObject) any { return nativeNumber(it["size"]) })
+	longestItems := top(longest, "duration", func(it nativeObject) any { return nativeNumber(nativeMap(it["media"])["duration"]) })
+	return nativeObject{"totalItems": len(items), "totalSize": size, "totalDuration": duration, "numAudioTracks": tracks, "numAuthors": len(authors), "totalAuthors": len(authors), "authorsWithCount": topAuthors, "totalGenres": len(genres), "genresWithCount": genreCounts, "numSeries": len(s.nativeGroups(r.Context(), items, "series")), "largestItems": largestItems, "longestItems": longestItems}
 }

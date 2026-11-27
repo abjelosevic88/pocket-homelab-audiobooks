@@ -195,7 +195,7 @@ func (s *Server) Router() http.Handler {
 	r.Get("/ping", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]bool{"success": true})
 	})
-	r.HandleFunc("/api/*", s.handleGateway)
+	r.Handle("/api/*", compressJSON(http.HandlerFunc(s.handleGateway)))
 	r.HandleFunc("/hls/*", s.handleGateway)
 	// Sign-in and live updates for third-party Audiobookshelf apps, and every native
 	// route under /audiobookshelf too (absgateway.go). GET /login stays the web sign-in page.
@@ -214,6 +214,20 @@ func (s *Server) Router() http.Handler {
 }
 
 // ---------- helpers ----------
+
+// compressJSON gzips the JSON answers of the Audiobookshelf-compatible API
+// (library stats, item lists) and nothing else: audio, covers and HLS keep
+// their bytes, and byte-range requests are never touched.
+func compressJSON(next http.Handler) http.Handler {
+	compressed := middleware.Compress(5, "application/json")(next)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Range") != "" {
+			next.ServeHTTP(w, r)
+			return
+		}
+		compressed.ServeHTTP(w, r)
+	})
+}
 
 func (s *Server) logging(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
